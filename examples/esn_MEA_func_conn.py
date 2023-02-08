@@ -17,10 +17,8 @@ import warnings
 import matplotlib.pyplot as plt
 from datetime import date
 plt.ioff() # turn off interactive mode
-# plt.ion() # turn on interactive mode
 import networkx as nx
 import scipy.io as sio
-import mat73
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -29,67 +27,59 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Metaparameters
 import_dataframe = 1
-dataframe_name = 'mackey_glass_MEA-Mecp2_2022_2022-12-27_50_runs.csv' # name of previously generated .csv dataframe to import for plotting
-reduce = 0
-node_level = 0
+dataframe_name = 'mackey_glass_MEA-Mecp2_2022_dataset_conn2res_2023-01-23_10_runs.csv' # name of previously generated .csv dataframe to import for plotting
+reduce = 1
 plot_diagnostics = 0
 plot_perf_curves = 1
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dataset = "MEA-Mecp2_2022"
-CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity', dataset) # MEA-Mecp2_2020_24Dec2022
+dataset = "MEA-Mecp2_2022_dataset_conn2res"
+CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity', dataset)
 NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_26Dec2022.csv')
 EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
-METADATA = "Mecp2_2022_dataset_conn2res.xlsx"
+METADATA = f"{dataset}.xlsx"
 
 # Today's date for saving objects
 today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-            sheet_name="Sheet1", engine="openpyxl") # sheet_name="0.9_thr" sheet_name="0.95_thr"
+            sheet_name="Sheet1", engine="openpyxl")
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
 
 # Get trial-based dataset for task
 task_name = 'mackey_glass'
-if task_name == 'PerceptualDecisionMaking':
-    kwargs = {'timing': {'fixation': 0, 'stimulus': 2000,
-                         'decision': 100}, 'cohs': np.array([51.2])}  # 0, 6.4, 12.8, 51.2
-elif task_name == 'PerceptualDecisionMakingDelayResponse':
-    kwargs = {'timing': {'fixation': 0, 'stimulus': 2000,
-                         'decision': 100, 'delay': (200)}, 'cohs': np.array([51.2])}
-elif task_name == 'ContextDecisionMaking':
-    kwargs = {'timing': {'fixation': 0, 'stimulus': 2000,
-                         'decision': 100, 'delay': 200}}
-elif task_name == 'GoNogo':
-    kwargs = {'timing': {'fixation': 0, 'stimulus': 1000,
-                         'decision': 100, 'delay': 200}}
-elif task_name == 'mackey_glass':
+
+if task_name == 'mackey_glass':
     tau = 17
-    horizon = 10
+    horizon = 15
     kwargs = {'n_timesteps': 4000, 'tau': tau, 'horizon': horizon}
 elif task_name == 'MemoryCapacity':
     horizon = -25
     kwargs = {'n_timesteps': 4000, 'horizon': horizon}
+elif task_name == 'spatial_classification':
+    kwargs = {}
+elif task_name == 'temporal_classification':
+    kwargs = {}
 
 idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
 metrics = ['score'] # , 'mse', 'nrmse'
-alphas = np.linspace(0.2, 3.0, num=15) #np.array([0.2, 0.8, 1.0, 1.2, 2.0])
+alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.linspace(0.2, 3.0, num=15)
 
-# Number of random input node selections
+# Input node selection
 n_input_nodes = 5
-nruns = 50
+nruns = 10
 
 # %% Main
 
 subj_ls = [] # initialise list to contain dictionaries for each alpha run
-ephys_data = pd.read_csv(EPHYS_DATA)
-network_data = pd.read_csv(NET_DATA)
+# ephys_data = pd.read_csv(EPHYS_DATA)
+# network_data = pd.read_csv(NET_DATA)
 
 for idx,file in names.iteritems():
 
@@ -134,25 +124,26 @@ for idx,file in names.iteritems():
             f'\n----------------------- alpha = {alpha} -----------------------')
 
         scores = {m:[] for m in metrics}
+
         alpha_dict = {
-            'index': idx,
             'name': file,
             'age': ages[idx],
             'genotype': genotypes[idx],
-            'n_output_nodes': conn.n_nodes-n_input_nodes,
             'alpha': np.round(alpha, 3),
             'regime': regime}
         
         for run in range(nruns):
+
             # we select a random set of input nodes
             if reduce:
-                input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
-            elif node_level: #TODO: define
-                input_nodes = np.array([run])
-            else:
-                input_subset = conn.reduce()
-                input_nodes = conn.get_nodes('random', nodes_from=input_subset) # pass whole network but only select from connected nodes
+                conn.reduce()
+                alpha_dict['size'] = conn.n_nodes
+            
+            # else: # pass whole network but only select from connected nodes
+            #     input_subset = conn.reduce()
+            #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes,nodes_from=input_subset)
 
+            input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
             output_nodes = conn.get_nodes('all', nodes_without=input_nodes)
 
             # create input connectivity matrix
@@ -180,8 +171,7 @@ for idx,file in names.iteritems():
                                             target=(y_train2, y_test2),
                                             model=model,
                                             metric=metrics)
-            df_run['run'] = run
-            #TODO: save df_run
+
             for m in metrics: scores[m].append(df_run.at[0, m])
 
             if plot_diagnostics:
@@ -207,8 +197,7 @@ for idx,file in names.iteritems():
                                             savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
         
         for m in metrics: alpha_dict[m] = np.mean(scores[m])
-        all_data = alpha_dict | network_data.iloc[idx].to_dict() | ephys_data.iloc[idx].to_dict()
-        subj_ls.append(all_data)
+        subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() # | network_data.iloc[idx].to_dict()
 
 df_subj = pd.DataFrame(subj_ls)
 df_subj.to_csv(
@@ -229,65 +218,36 @@ if plot_perf_curves:
     # plot performance over runs for each sample at each alpha value
     for m in metrics:
 
-        # # plot genotype comparisons for all ages grouped
-        # plotting.plot_performance_curve(
-        #     df_subj, title=f'{task_name}_{dataset}_performance_{m}_{nruns}_runs', y=m, hue='genotype',
-        #     hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, show=True, block=False)
+        plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="genotype", hue_order=["WT", "HE", "KO"],
+        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}', **kwargs)
+           
+        # plot genotype comparisons for dynamical regimes
+        plotting.boxplot(x='regime', y=m, df=df_subj, hue='genotype', hue_order=["WT", "HE", "KO"],
+            ylim=[0,1], figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_boxplots')
 
-        # # plot genotype comparisons for dynamical regimes
-        # plotting.boxplot(x='regime', y=m, df=df_subj,hue='genotype',hue_order=["WT", "HE", "KO"],
-        #     ylim=(0,1), figsize=figsize, savefig=True, block=False,
-        #     title=f'{task_name}_{dataset}_performance_{m}_boxplots_{nruns}_runs')
+        # plot genotype comparisons at each developmental age
+        plotting.plot_performance_curve(df_subj, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
+        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
+        **kwargs)
 
-        # # plot genotype comparisons at each developmental age
-        # plotting.plot_performance_curve(df_subj, by_age=True, y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, block=False,
-        # title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}_{nruns}_runs',
+        # # plot performance normalised by energetic cost metrics
+        # plotting.plot_performance_curve(df_subj, y=m, xlim=[min(alphas), max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
+        # norm=True, norm_var= "meanspikes", figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_normalised_by_channel_average_spikes',
         # **kwargs)
-
-        # # plot performance normalised by average spikes across active channels
-        # norm_df_subj = df_subj.copy()
-        # norm_df_subj[m] = norm_df_subj[m] / norm_df_subj["meanspikes"]
-        # max_score = max(norm_df_subj[m])
-        # min_score = min(norm_df_subj[m])
-        # norm_df_subj[m] = (norm_df_subj[m] - min_score) / (max_score - min_score)
-    
-        # plotting.plot_performance_curve(norm_df_subj, y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, block=False,
-        # title=f'{task_name}_{dataset}_performance_{m}_normalised_by_channel_average_spikes_{nruns}_runs',
-        # **kwargs)
-
-        # plotting.boxplot(x='regime', y=m, df=norm_df_subj, hue='genotype',hue_order=["WT", "HE", "KO"],
-        #     ylim=(0,1), figsize=figsize, savefig=True, block=False,
-        #     title=f'{task_name}_{dataset}_performance_{m}_boxplots_normalised_by_channel_average_spikes_{nruns}_runs')
 
         # examine trends at peak performance (alpha = 1.0)
         alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
 
-        # plotting.plot_performance_curve(alpha_data, x='age', y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, block=False,
-        # title=f'{task_name}_{dataset}_performance_{m}_across_development_normalised_by_channel_average_spikes_{nruns}_runs',
-        # **kwargs)
-
-        # # # plot change in performance over development
-        # # plotting.plot_performance_curve(alpha_data, x='age', y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
-        # # figsize=figsize, savefig=True, block=False,
-        # # title=f'{task_name}_{dataset}_performance_across_development_{m}_{nruns}_runs',
-        # # **kwargs)
+        # plot change in performance over development
+        plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
+        hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False,
+        title=f'{task_name}_{dataset}_performance_across_development_{m}',
+        **kwargs)
 
         # linear regression model for performance as a function of network and electrophysiological variables
-        network_vars = ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # node_vars = ["NS", "aveControl", "modalControl", "BC", "PC"]
-        ephys_vars = ['meanspikes','NBurstRate', 'meanNumChansInvolvedInNbursts',
-         'meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+        network_vars = ["size"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        ephys_vars = ['meanspikes', 'FRmean'] # ['meanspikes','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
          
-        for v in ephys_vars:
-            plotting.plot_perf_reg(df_subj, x=v, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}_{nruns}_runs',
-                y=m,hue='genotype',savefig=True)
-        
-        # # # plot cumulative mean performance over runs at given alpha value(s)
-        # # for idx,file in names.iteritems():
-        # #     alpha_data['cum_avg_perf'] = alpha_data[m].expanding().mean()
-        # #     plotting.plot_performance_curve(alpha_data, title=f'{task_name}_{dataset}_{file}_{alpha}_performance_over_{nruns}_runs',
-        # #     x='run', y='cum_avg_perf',savefig = True)
-# %%
+        for v in [network_vars, ephys_vars]:
+            plotting.plot_perf_reg(alpha_data, x=v,
+                y=m,hue='genotype',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')

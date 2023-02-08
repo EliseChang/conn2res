@@ -106,7 +106,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     plt.legend()
     plt.suptitle(title)
 
-    sns.despine(offset=10, trim=True)
+    sns.despine()
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}_io.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
@@ -115,7 +115,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
 
 
 def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
+                           xlim=None, legend=True,ticks=None, markers=False,norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
     fig = plt.figure(figsize=figsize)
@@ -124,11 +124,8 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-        if hue_order is None and isinstance(df[hue][0], str):
-            if 'VIS' in list(np.unique(df[hue])):
-                hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
-            elif "WT" in list(np.unique(df[hue])):
-                hue_order = ["WT", "HE", "KO"]
+        if hue_order is None and "WT" in list(np.unique(df[hue])):
+            hue_order = ["WT", "HE", "KO"]
 
     if norm:
         df[y] = df[y] / df[norm_var]
@@ -165,13 +162,26 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                         hue_order=hue_order,
                         palette=palette,
                         markers=True,
+                        legend=legend,
                         ax=ax)
-    
-    if ylim is not None: plt.ylim(ylim)
-    sns.despine(offset=10, trim=True)
+    if markers:
+        plot = sns.scatterplot(data=df, x=x, y=y,
+                        hue=hue,
+                        hue_order=hue_order,
+                        palette=palette,
+                        ax=ax)
 
+    if ylim is not None: plt.ylim(ylim)
     plt.legend(title=hue, loc='upper right')
-    fig.suptitle(title, fontsize=20)
+
+    if xlim is not None: plt.xlim(xlim)
+    if ticks is not None: plt.xticks(ticks, fontsize=22)
+    else: plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+
+    sns.despine()
+
+    fig.suptitle(title, fontsize=24)
     
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
@@ -179,7 +189,7 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT", "HE", "KO"],
+def plot_perf_reg(df, x, title=None, y='score', ylim=[0,1], hue='genotype', hue_order=["WT", "HE", "KO"],
     figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
 
     if hue is not None:
@@ -192,24 +202,30 @@ def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT
             elif "WT" in list(np.unique(df[hue])):
                 hue_order = ["WT", "HE", "KO"]
 
-    g = sns.lmplot(data=df,
+    g = sns.scatterplot(data=df,
                 x=x,
                 y=y,
                 markers=True,
+                legend=False,
                 hue=hue,
                 hue_order=hue_order,
-                palette=palette,
-                ci=None)
+                palette=palette)
+                #,ci=None)
 
-    sns.despine(offset=10, trim=True)
-    g.fig.suptitle(title, fontsize=20)
+    sns.despine()
+    plt.ylim(ylim)
+    plt.yticks(fontsize=16)
+    plt.xticks(fontsize=16)
+    # g.fig.suptitle(title, fontsize=20)
     if savefig:
-        g.fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
+        # g.fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+        #             transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
 
-def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None,
-                     cmap=None, scaler=1, num=1, figsize=(19.2, 9.43), subplot=None, title=None, fname='time_course',
+def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None, xticks=None, yticks=None,
+                     cmap=None, style='solid', scaler=1, num=1, figsize=(19.2, 9.43), subplot=None, title=None, fname=None,
                      legend_label=None, savefig=False, show=False, block=True, **kwargs):
 
     # transform data
@@ -225,11 +241,11 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     # plot data
     if x.size > 0:
         if sample is None:
-            plt.plot(x)
+            plt.plot(x,linestyle=style)
         else:
             t = np.arange(*sample)
             if cmap is None:
-                plt.plot(t, x[t])
+                plt.plot(t, x[t],linestyle=style)
             else:
                 for i, _ in enumerate(t[:-1]):
                     plt.plot(t[i:i+2], x[t[i:i+2]],
@@ -260,8 +276,8 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
             #     0.5, 1.05), fontsize=10, ncol=len(legend))
 
     # set xtick/ythick fontsize
-    plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
+    if xticks is not None: plt.xticks(xticks,fontsize=22)
+    if yticks is not None: plt.yticks(yticks, fontsize=22)
     # plt.yticks([y_min, y_max], fontsize=22)
 
     # add title
@@ -272,7 +288,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     plt.tight_layout()
 
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
     # plt.close()
@@ -364,7 +380,7 @@ def boxplot(x, y, df, title=None, hue=None, hue_order=None, palette=None, orient
     if ylim is not None: ax.set_ylim(ylim)
     #  if y_major_loc is not None: ax.yaxis.set_major_locator(MultipleLocator(y_major_loc))
 
-    sns.despine(offset=10, trim='False')
+    sns.despine()
 
     # set tight layout in case there are different subplots
     plt.tight_layout()

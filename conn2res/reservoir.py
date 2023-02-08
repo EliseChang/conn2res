@@ -39,7 +39,7 @@ class Conn:
         else:
             if conn_data is not None:
                 # load connectivity data
-                self.w = load_file(conn_data, file_type, data_dir=conn_data_dir)
+                self.w = load_file(conn_data, conn_data_dir, file_type)
                 # if array is 3D select one subject
                 try:
                     self.w = self.w[:, :, subj_id]

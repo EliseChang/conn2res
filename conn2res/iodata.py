@@ -17,8 +17,7 @@ from .task import select_model
 from . import plotting
 
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# TODO: read data directory as a variable specified in the main script
-DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data')
+TASK_DIR = os.path.join(PROJ_DIR, 'examples', 'data', 'tasks')
 
 NEUROGYM_TASKS = [
     'AntiReach',
@@ -72,14 +71,17 @@ RESERVOIRPY_TASKS = [
     'rossler'
 ]
 
-def load_file(file_name, file_type=None, data_dir=None):
+STIMULATION_TASKS = [
+    'organoid_stim_220725'
+]
+
+def load_file(file_name, data_dir, file_type=None):
+
     """
     Loads data files and optionally converts .csv files to numpy arrays
     """
     if file_type is None:
         file_type = os.path.splitext(file_name)[-1]
-    if data_dir is None:
-        data_dir = DATA_DIR
     if file_type == '.npy':
         return np.load(os.path.join(data_dir, file_name))
     elif file_type == '.csv':
@@ -126,7 +128,7 @@ def encode_labels(labels):
 
     return enc_labels
 
-def fetch_dataset(task, **kwargs):
+def fetch_dataset(task, horizon=None, **kwargs):
     """
     Fetches inputs and labels for 'task' from the NeuroGym
     repository
@@ -166,9 +168,9 @@ def fetch_dataset(task, **kwargs):
         # create a conn2res Dataset
         return create_neurogymn_dataset(task, **kwargs)
 
-    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS:
+    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_TASKS:
         # create a conn2res Dataset
-        return create_dataset(task, **kwargs)
+        return create_dataset(task, horizon, **kwargs)
 
 
 def create_neurogymn_dataset(task, n_trials=100, add_constant=False, **kwargs):
@@ -220,7 +222,7 @@ def create_neurogymn_dataset(task, n_trials=100, add_constant=False, **kwargs):
         return inputs, labels
 
 
-def create_dataset(task, n_timesteps=1000, horizon=1, **kwargs):
+def create_dataset(task, horizon, n_timesteps=1000, **kwargs):
 
     # make sure horizon is a list
     if isinstance(horizon, int):
@@ -246,6 +248,10 @@ def create_dataset(task, n_timesteps=1000, horizon=1, **kwargs):
         func = getattr(datasets, task)
         n_timesteps = n_timesteps + horizon_max
         x = func(n_timesteps=n_timesteps, **kwargs)
+
+    elif task in STIMULATION_TASKS:
+        n_timesteps = n_timesteps + horizon_max
+        x = load_file(file_name=f'{task}.csv', data_dir=TASK_DIR)[:n_timesteps]
 
     y = np.hstack([x[horizon_max-h:-h] for h in horizon])
     x = x[horizon_max:]

@@ -4,6 +4,8 @@ MEA functional connectome-informed reservoir (Echo-State Network)
 =================================================
 """
 
+# %% Imports
+
 # from reservoirpy.nodes import Reservoir, Ridge
 import os
 from bct.algorithms.degree import strengths_und
@@ -13,11 +15,29 @@ import pandas as pd
 import numpy as np
 import warnings
 import matplotlib.pyplot as plt
+from datetime import date
 plt.ioff() # turn off interactive mode
+# plt.ion() # turn on interactive mode
 import networkx as nx
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
+
+# %% Set global variables
+
+# Import metadata
+PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data', 'MEA-Mecp2_2020_0.9_thr')
+#TODO: move creation of output figure directory here
+today = date.today()
+
+dataset = 'MEA-Mecp2_2020_0.9_thr'
+
+metadata = pd.read_excel(os.path.join(DATA_DIR, "Mecp2_2020_dataset.xlsx"),
+            sheet_name="Sheet1", engine="openpyxl")
+names = metadata["File name"]
+ages = metadata["Age"]
+genotypes = metadata["Genotype"]
 
 # Get trial-based dataset for task
 task_name = 'mackey_glass'
@@ -46,22 +66,12 @@ idx_washout = 200
 # Metrics to evaluate the regression model for RC output
 metric = ['rsquare'] # , 'mse', 'nrmse'
 
-nruns = 3
+# Number of random input node selections
+nruns = 1
 
-# Import metadata
-PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data', 'MEA-Mecp2_all')
-dataset = 'MEA-Mecp2_all'
+df_subj = [] # initialise
 
-metadata = pd.read_excel(os.path.join(DATA_DIR, "Mecp2_dataset_all.xlsx"),
-            sheet_name="Sheet1", engine="openpyxl")
-names = metadata["File name"]
-ages = metadata["Age"]
-genotypes = metadata["Genotype"]
-
-fig_num = 1
-df_subj = []
-
+# %%
 for idx,file in names.iteritems():
     # Import connectivity matrix
     print(
@@ -73,7 +83,7 @@ for idx,file in names.iteritems():
     try:
         conn.scale_and_normalize()
     except ValueError:
-        # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+        input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
     # generate and fetch data
@@ -140,40 +150,61 @@ for idx,file in names.iteritems():
             df['nodes'] = conn.n_nodes
             N = 200
             tau = 100
-            figsize = (12, 6)
+            # figsize=(19.2, 9.43)
             # sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
             # plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
-            #                             num=fig_num, figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
+            #                             figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
             # plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
-            #                                         num=fig_num, figsize=figsize, subplot=(3, 3, 3), block=False)
+            #                                         figsize=figsize, subplot=(3, 3, 3), block=False)
 
             # sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
             # plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
-            #                             num=fig_num, figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
+            #                             figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
             # plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
-            #                             num=fig_num, figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
+            #                             figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
             # plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
-            #                                         ylim=[0.2, 1.4], num=fig_num, figsize=figsize, subplot=(3, 3, 6), block=False)
+            #                                         ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
 
             # plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
-            #                             num=fig_num, figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
+            #                             figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
             #                             savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
-            fig_num += 1
 
             df_subj.append(df)
 
 df_subj = pd.concat(df_subj, ignore_index=True)
+df_subj.to_csv(
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{nruns}_run.csv')
+print("Dataframe saved.")
 
-############################################################################
-# Now we plot the performance curve
+#%% Import dataframe -- COMMENT OUT WHEN RUNNING NEW ANALYSES
+# df_csv = 'mackey_glass_MEA-Mecp2_2022_2022-11-12_3_runs.csv' # name of previously generated .csv dataframe to import for plotting 
+# df_subj = pd.read_csv(os.path.join(PROJ_DIR, 'dataframes', df_csv))
 
-# df_subj.to_csv(
-#     f'/Users/amihalik/Documents/projects/reservoir/conn2res/figs/{task_name}_performance.csv')
+# %% Plotting performance
 
-# performance
-
+figsize=(19.2, 9.43)
 for m in metric:
+    kwargs = {'ages': np.sort(ages.unique()),
+    'genotypes': genotypes.unique()}
+
+    # plot genotype comparisons for all ages grouped
     plotting.plot_performance_curve(
         df_subj, f'{task_name}_{dataset}_performance_{nruns}_runs', y=m, hue='genotype' # name of column in dataframe to use for grouping
-        , norm=False, num=fig_num, figsize=(12, 6), savefig=True, show=True, block=False)
-    fig_num += 1
+        , norm=False, figsize=figsize, savefig=True, show=True, block=False)
+    
+    # plot genotype comparisons at each developmental age
+    plotting.plot_performance_curve(df_subj, by_age=True, y=m, hue='genotype',
+    norm=False, figsize=figsize, savefig=True, show=False, block=False,
+    title=f'{task_name}_{dataset}_performance_across_development_{m}_{nruns}_run',
+     **kwargs)
+    
+    # plot change in performance over development at a given alpha
+    alphas = np.array([0.8, 1.0])
+    for alpha in alphas:
+        alpha_data = df_subj[df_subj['alpha'] == alpha].reset_index()
+        plotting.plot_performance_curve(alpha_data, x='age', y=m, hue='genotype',
+        norm=False, figsize=figsize, savefig=True, show=False, block=False,
+        title=f'{task_name}_{dataset}_performance_across_development_for_alpha_{alpha}_{m}_{nruns}_run',
+        **kwargs)
+
+# %%

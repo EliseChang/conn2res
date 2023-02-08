@@ -141,12 +141,11 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     # plt.close()
 
 
-def plot_performance_curve(df, title, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, num=2, figsize=(12, 10), savefig=False, show=False, block=True):
+def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
+                           norm=False, savefig=False, show=False, block=True, **kwargs):
 
-    sns.set(style="ticks", font_scale=2.0)
-    fig = plt.figure(num=num, figsize=figsize)
-    ax = plt.subplot(111)
+    sns.set(style="ticks", font_scale=1.0)
+    fig = plt.figure(figsize=(19.2, 9.43))
 
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
@@ -155,26 +154,51 @@ def plot_performance_curve(df, title, x='alpha', y='score', hue=None, hue_order=
         if hue_order is None and isinstance(df[hue][0], str):
             if 'VIS' in list(np.unique(df[hue])):
                 hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
-            else:
+            elif "WT" in list(np.unique(df[hue])):
                 hue_order = ["WT", "HE", "KO"]
 
     if norm:
         df[y] = df[y] / max(df[y])
+    
+    if by_age:
+        
+        ages = kwargs.get('ages')
+        age_point = 1
+        plot_legend = True
+        for DIV in ages:
+            ax = plt.subplot(2, 3, age_point)
+            age_data = df[df['age'] == DIV]
+            plot = sns.lineplot(data=age_data, x=x, y=y,
+                        hue=hue,
+                        hue_order=hue_order,
+                        palette=palette,
+                        markers=True,
+                        legend=plot_legend,
+                        ax=ax)
+            plot.set_title(f'DIV{DIV}', loc='left')
+            if plot_legend:
+                sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
+                plot_legend = False # plot legend only once
+            age_point += 1
 
-    sns.lineplot(data=df, x=x, y=y,
-                 hue=hue,
-                 hue_order=hue_order,
-                 palette=palette,
-                 markers=True,
-                 ax=ax)
+    else:
+        ax = fig.add_subplot()
+        plot = sns.lineplot(data=df, x=x, y=y,
+                        hue=hue,
+                        hue_order=hue_order,
+                        palette=palette,
+                        markers=True,
+                        ax=ax)
 
     if ylim is not None:
         plt.ylim(ylim)
     sns.despine(offset=10, trim=True)
+
     plt.legend(title=hue, loc='upper right')
-    plt.title(title)
+    fig.suptitle(title, fontsize=20)
+
     if savefig:
-        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}_{y}.png'),
+        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
     # plt.close()

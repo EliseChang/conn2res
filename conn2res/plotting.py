@@ -11,11 +11,42 @@ import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from numpy.linalg import svd, norm
+import math
+from datetime import date
 
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIG_DIR = os.path.join(PROJ_DIR, 'figs')
+today = date.today()
+FIG_DIR = os.path.join(PROJ_DIR, 'figs', today.strftime("%d%b%Y"))
 if not os.path.isdir(FIG_DIR):
     os.makedirs(FIG_DIR)
+
+def round_decimals_up(number:float, decimals:int=2):
+    """
+    Returns a value rounded up to a specific number of decimal places.
+    """
+    if not isinstance(decimals, int):
+        raise TypeError("decimal places must be an integer")
+    elif decimals < 0:
+        raise ValueError("decimal places has to be 0 or more")
+    elif decimals == 0:
+        return math.ceil(number)
+
+    factor = 10 ** decimals
+    return math.ceil(number * factor) / factor
+
+def round_decimals_down(number:float, decimals:int=2):
+    """
+    Returns a value rounded down to a specific number of decimal places.
+    """
+    if not isinstance(decimals, int):
+        raise TypeError("decimal places must be an integer")
+    elif decimals < 0:
+        raise ValueError("decimal places has to be 0 or more")
+    elif decimals == 0:
+        return math.floor(number)
+
+    factor = 10 ** decimals
+    return math.floor(number * factor) / factor
 
 
 class PCA:
@@ -82,7 +113,7 @@ class PCA:
         return self.transform(data, **kwargs)
 
 
-def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, block=True):
+def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, block=True):
 
     fig = plt.figure(num=num, figsize=figsize)
     ax = plt.subplot(111)
@@ -106,11 +137,12 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, block=True):
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}_io.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-    plt.show(block=block)
+    if show: plt.show(block=block)
+    # plt.close()
 
 
 def plot_performance_curve(df, title, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, num=2, figsize=(12, 10), savefig=False, block=True):
+                           norm=False, num=2, figsize=(12, 10), savefig=False, show=False, block=True):
 
     sns.set(style="ticks", font_scale=2.0)
     fig = plt.figure(num=num, figsize=figsize)
@@ -120,8 +152,11 @@ def plot_performance_curve(df, title, x='alpha', y='score', hue=None, hue_order=
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-        if 'VIS' in list(np.unique(df[hue])):
-            hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
+        if hue_order is None and isinstance(df[hue][0], str):
+            if 'VIS' in list(np.unique(df[hue])):
+                hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
+            else:
+                hue_order = ["WT", "HE", "KO"]
 
     if norm:
         df[y] = df[y] / max(df[y])
@@ -141,8 +176,8 @@ def plot_performance_curve(df, title, x='alpha', y='score', hue=None, hue_order=
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}_{y}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-    plt.show(block=block)
-
+    if show: plt.show(block=block)
+    # plt.close()
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None,
                      cmap=None, scaler=1, num=1, figsize=(12, 6), subplot=None, title=None, fname='time_course',
@@ -170,11 +205,15 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
                 for i, _ in enumerate(t[:-1]):
                     plt.plot(t[i:i+2], x[t[i:i+2]],
                              color=getattr(plt.cm, cmap)(255*i//np.diff(sample)))
-
+                             
         # add x and y limits
         plt.xlim(xlim)
+        y_min = round_decimals_down(np.min(x),1)
+        y_max = round_decimals_up(np.max(x),1)
         if ylim is not None:
             plt.ylim(ylim)
+        else:
+            plt.ylim([y_min, y_max])
 
         # plot legend
         if legend_label is not None:
@@ -197,6 +236,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     # set xtick/ythick fontsize
     plt.xticks(fontsize=22)
     plt.yticks(fontsize=22)
+    # plt.yticks([y_min, y_max], fontsize=22)
 
     # add title
     if title is not None:
@@ -208,7 +248,8 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-    plt.show(block=block)
+    if show: plt.show(block=block)
+    # plt.close()
 
 
 def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=[0, 150],
@@ -373,4 +414,5 @@ def plot_mackey_glass_phase_space(x, y, sample=None, xlim=None, ylim=None, subpl
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-    plt.show(block=block)
+    if show: plt.show(block=block)
+    # plt.close()

@@ -6,6 +6,7 @@ Reservoir classes
 """
 
 import itertools as itr
+from warnings import catch_warnings
 import numpy as np
 import numpy.ma as ma
 from numpy.linalg import (pinv, matrix_rank)
@@ -30,19 +31,22 @@ class Conn:
     # TODO
     """
 
-    def __init__(self, filename=None, subj_id=0, w=None):
+    def __init__(self, subj_id=0, w=None, conn_data=None, file_type=None, conn_data_dir=None):
+
         if w is not None:
             # assign provided connectivity data
             self.w = w
         else:
-            # load connectivity data
-            if filename is not None:
-                self.w = np.load(filename)
+            if conn_data is not None:
+                # load connectivity data
+                self.w = load_file(conn_data, file_type, data_dir=conn_data_dir)
+                # if array is 3D select one subject
+                try:
+                    self.w = self.w[:, :, subj_id]
+                except IndexError:
+                    pass
             else:
-                self.w = load_file('connectivity.npy')
-
-            # select one subject
-            self.w = self.w[:, :, subj_id]
+                raise Exception("Missing name of connectivity data file.")
 
         # set zero diagonal
         np.fill_diagonal(self.w, 0)
@@ -455,7 +459,7 @@ class EchoStateNetwork(Reservoir):
 
             # if (t>0) and (t%100 == 0): print(f'\t ----- timestep = {t}')
             synap_input = np.dot(
-                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih)
+                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih) # why is this t-1
             self._state[t, :] = self.activation_function(synap_input)
 
         # select output nodes and remove initial condition (to match the time index of

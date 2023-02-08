@@ -25,7 +25,7 @@ def get_modules(module_assignment):
     return module_ids, readout_modules
 
 
-def encoder(reservoir_states, target, readout_modules=None,
+def encoder(reservoir_states, target,
             readout_nodes=None, metric='score', return_model=True, **kwargs):
     """
     Function that defines the set(s) of readout nodes based on whether

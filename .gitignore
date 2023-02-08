@@ -8,6 +8,9 @@ examples/ohbm_sim.py
 
 # data files 
 data/
+dataframes/
+requirements_am.txt
+tasks/
 
 # hidden files
 .DS_store

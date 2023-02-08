@@ -7,7 +7,9 @@ Functions for generating input/output data for tasks
 
 import os
 from re import I
+import pandas as pd
 import numpy as np
+import math
 import neurogym as ngym
 from reservoirpy import datasets
 
@@ -15,6 +17,7 @@ from .task import select_model
 from . import plotting
 
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# TODO: read data directory as a variable specified in the main script
 DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data')
 
 NEUROGYM_TASKS = [
@@ -69,9 +72,21 @@ RESERVOIRPY_TASKS = [
     'rossler'
 ]
 
-
-def load_file(filename):
-    return np.load(os.path.join(DATA_DIR, filename))
+def load_file(file_name, file_type=None, data_dir=None):
+    """
+    Loads data files and optionally converts .csv files to numpy arrays
+    """
+    if file_type is None:
+        file_type = os.path.splitext(file_name)[-1]
+    if data_dir is None:
+        data_dir = DATA_DIR
+    if file_type == '.npy':
+        return np.load(os.path.join(data_dir, file_name))
+    elif file_type == '.csv':
+        df = pd.read_csv(os.path.join(data_dir, file_name), header=None)
+        return df.to_numpy()
+    else:
+        raise TypeError("Unsupported file type. Import .npy or .csv file.")
 
 
 def get_available_tasks():
@@ -96,6 +111,20 @@ def unbatch(x):
     # TODO right now it only works when x is (batch_first = False)
     return np.concatenate(x, axis=0)
 
+def encode_labels(labels):
+    """
+        Binary encoding of categorical labels for classification
+        problems
+        # TODO
+    """
+
+    enc_labels = -1 * \
+        np.ones((labels.shape[0], len(np.unique(labels))), dtype=np.int16)
+
+    for i, label in enumerate(labels):
+        enc_labels[i][label] = 1
+
+    return enc_labels
 
 def fetch_dataset(task, **kwargs):
     """

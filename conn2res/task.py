@@ -12,14 +12,17 @@ import pandas as pd
 import scipy as sp
 # import mdp
 
-
 from sklearn.metrics import make_scorer
 from sklearn import metrics
+from sklearn.model_selection import ParameterGrid
+from sklearn.linear_model import Ridge, RidgeClassifier
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 from sklearn.linear_model import Ridge, RidgeClassifier
 from sklearn.ensemble import RandomForestRegressor
 
+
+from reservoirpy import observables
 
 
 def check_xy_dims(x, y):
@@ -82,8 +85,8 @@ def nrmse(y_true, y_pred):
 
     return error / y_true.var()
 
+def regression(x, y, model=None, metric=['score'], **kwargs):
 
-def regression(x, y, model=None, metric='score', **kwargs):
     """
     Regression tasks
     # TODO
@@ -104,10 +107,53 @@ def regression(x, y, model=None, metric='score', **kwargs):
     # fit model on training data
     model.fit(x_train, y_train, sample_weight_train)
 
-    # calculate model metric on test data
-    if metric == 'score':
-        # by default, use score method of model
-        metric_value = model.score(x_test, y_test, sample_weight_test)
+    # calculate model scores on test data
+    score = []
+    for m in metric:
+        if m == 'score':
+            score.append(model.score(x_test, y_test, sample_weight_test))
+        else:
+            func = getattr(observables, m)
+            y_pred = model.predict(x_test)
+            score.append(func(y_test, y_pred))
+
+    return score, model
+
+
+def multiOutputRegression(x, y, model=None, metric=['corrcoef'], **kwargs):
+    """
+    Multiple output regression tasks
+    # TODO
+    """
+
+    # pop variables from kwargs
+    sample_weight_train, sample_weight_test = kwargs.pop(
+        'sample_weight', (None, None))
+
+    x_train, x_test = x
+    y_train, y_test = y
+
+    # specify default model
+    if model is None:
+        model = MultiOutputRegressor(
+            Ridge(fit_intercept=False, alpha=0.5, **kwargs))
+
+    if isinstance(model, MultiOutputRegressor):
+        # fit model on training data
+        model.fit(x_train, y_train)
+
+        # calculate model scores on test data
+        if metric[0] == 'corrcoef':
+            y_pred = model.predict(x_test)
+            n_outputs = y_pred.shape[1]
+
+            corrcoef = []
+            for output in range(n_outputs):
+                corrcoef.append(
+                    np.abs((np.corrcoef(y_test[:, output], y_pred[:, output])[0][1])))
+
+            score = [np.sum(corrcoef)]
+
     else:
         y_pred = model.predict(x_test)
         try:
@@ -117,11 +163,10 @@ def regression(x, y, model=None, metric='score', **kwargs):
             # finally, try functions from current module
             func = getattr(sys.modules[__name__], metric)
         metric_value = func(y_test, y_pred)
-
     return metric_value, model
 
+def classification(x, y, model=None, metric=['score'], **kwargs):
 
-def classification(x, y, model=None, metric='score', **kwargs):
     """
     Binary classification tasks
     # TODO
@@ -146,17 +191,20 @@ def classification(x, y, model=None, metric='score', **kwargs):
     model.fit(x_train, y_train, sample_weight_train)
 
     # calculate model scores on test data
-    metric_value = model.score(x_test, y_test, sample_weight_test)
+    if metric[0] == 'score':
+        score = [model.score(x_test, y_test, sample_weight_test)]
 
     # # confusion matrix
     # ConfusionMatrixDisplay.from_predictions(y_test, model.predict(x_test))
     # plt.show()
     # plt.close()
 
-    return metric_value, model
+    return score, model
 
 
-def multiClassClassification(x, y, model=None, metric='score', **kwargs):
+
+def multiClassClassification(x, y, model=None, metric=['score'], **kwargs):
+
     """
     Multi-class Classification tasks
     # TODO
@@ -187,13 +235,15 @@ def multiClassClassification(x, y, model=None, metric='score', **kwargs):
         model.fit(x_train[idx_train], y_train[idx_train])
 
         # calculate model scores on test data
-        metric_value = model.score(x_test[idx_test], y_test[idx_test])
+        if metric[0] == 'score':
+            score = [model.score(x_test[idx_test], y_test[idx_test])]
     else:
         # fit model on training data
         model.fit(x_train, y_train, sample_weight_train)
 
         # calculate model scores on test data
-        metric_value = model.score(x_test, y_test, sample_weight_test)
+        if metric[0] == 'score':
+            score = [model.score(x_test, y_test, sample_weight_test)]
 
     # # confusion matrix
     # ConfusionMatrixDisplay.from_predictions(y_test[idx_test], model.predict(x_test[idx_test]))
@@ -204,8 +254,7 @@ def multiClassClassification(x, y, model=None, metric='score', **kwargs):
     #     cm = metrics.confusion_matrix(y_test[idx_test], model.predict(x_test[idx_test]))
     #     score = np.sum(np.diagonal(cm))/np.sum(cm)  # turned out to be equivalent to the native sklearn score
 
-    return metric_value, model
-
+    return score, model
 
 def multiOutputRegression(x, y, model=None, metric='corrcoef', **kwargs):
     """
@@ -255,8 +304,8 @@ def multiOutputRegression(x, y, model=None, metric='corrcoef', **kwargs):
 
     return metric_value, model
 
+def multiOutputClassification(x, y, model=None, metric=['score'], **kwargs):
 
-def multiOutputClassification(x, y, model=None, metric='score', **kwargs):
     """
     Multiple output (binary and multi-class) classification tasks
     # TODO
@@ -283,15 +332,18 @@ def multiOutputClassification(x, y, model=None, metric='score', **kwargs):
         model.fit(x_train, y_train)
 
         # calculate model scores on test data
-        metric_value = model.score(x_test, y_test)
+
+        if metric[0] == 'score':
+            score = [model.score(x_test, y_test)]
     else:
         # fit model on training data
         model.fit(x_train, y_train, sample_weight_train)
 
         # calculate model scores on test data
-        metric_value = model.score(x_test, y_test, sample_weight_test)
+        if metric[0] == 'score':
+            score = [model.score(x_test, y_test, sample_weight_test)]
 
-    return metric_value, model
+    return score, model
 
 
 def select_model(y):
@@ -350,18 +402,18 @@ def run_task(reservoir_states, target, metric, **kwargs):
     # select training model
     func = select_model(y=y_train)
 
-    # make metric a tuple to enable different metrics on the same model
-    if isinstance(metric, str):
-        metric = (metric,)
+    
+    # make metric a list to enable different metrics on the same model
+    if not isinstance(metric, list):
+        metric = [metric]
 
     # fit model
-    metrics = dict()
-    for m in metric:
-        metrics[m], model = func(x=(x_train, x_test), y=(
-            y_train, y_test), metric=m, **kwargs)
-        print(f'\t\t {m} = {metrics[m]}')
+    score, model = func(x=(x_train, x_test), y=(
+        y_train, y_test), metric=metric, **kwargs)
+    print(f'\t\t {metric[0]} = {score[0]}')
 
-    df_res = pd.DataFrame(data=metrics, index=[0])
+    df_res = pd.DataFrame(
+        data={val: score[i] for i, val in enumerate(metric)}, index=[0])
 
     return df_res, model
 

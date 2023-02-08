@@ -65,8 +65,9 @@ class Conn:
 
         # indexes of set of active nodes
         self.idx_node = np.full(self.n_nodes, True)
-
-        # make sure that all nodes are connected to the rest of the network
+    
+    def reduce(self):
+        """ Make sure that all nodes are connected to the rest of the network"""
         self.subset_nodes(idx_node=np.logical_or(
             np.any(self.w != 0, axis=0), np.any(self.w != 0, axis=1)))
 
@@ -199,7 +200,7 @@ class Conn:
             nodes_from = np.setdiff1d(nodes_from, nodes_without)
 
             # select random nodes
-            selected_nodes = np.random.choice(nodes_from, size=n_nodes)
+            selected_nodes = np.random.choice(nodes_from, size=n_nodes, replace=False)
 
         elif node_set == 'shortest_path':
             # calculate shortest paths between all nodes

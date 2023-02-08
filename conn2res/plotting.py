@@ -195,7 +195,8 @@ def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT
                 markers=True,
                 hue=hue,
                 hue_order=hue_order,
-                palette=palette)
+                palette=palette,
+                ci=None)
 
     sns.despine(offset=10, trim=True)
     g.fig.suptitle(title, fontsize=20)
@@ -206,7 +207,7 @@ def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None,
                      cmap=None, scaler=1, num=1, figsize=(12, 6), subplot=None, title=None, fname='time_course',
-                     legend_label=None, savefig=False, block=True, **kwargs):
+                     legend_label=None, savefig=False, show=False, block=True, **kwargs):
 
     # transform data
     x = transform_data(x, feature_set, idx_features=idx_features,
@@ -396,7 +397,7 @@ def transform_data(data, feature_set, idx_features=None, n_features=None, scaler
 
 
 def plot_mackey_glass_phase_space(x, y, sample=None, xlim=None, ylim=None, subplot=None, cmap=None,
-                                  num=1, figsize=(13, 5), title=None, fname='phase_space', savefig=False, block=False):
+                                  num=1, figsize=(13, 5), title=None, fname='phase_space', savefig=False, show=False, block=False):
     # open figure and create subplot
     plt.figure(num=num, figsize=figsize)
     if subplot is None:

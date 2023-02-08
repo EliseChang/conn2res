@@ -19,22 +19,30 @@ from datetime import date
 plt.ioff() # turn off interactive mode
 # plt.ion() # turn on interactive mode
 import networkx as nx
+import scipy.io as sio
+import mat73
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 # %% Set global variables
 
-# Import metadata
+# Metaparameters
+import_dataframe = 1
+dataframe_name = 'mackey_glass_MEA-Mecp2_2022_60_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
+plot_diagnostics = 0
+plot_perf_curves = 1
+
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data', 'MEA-Mecp2_2020_0.9_thr')
-#TODO: move creation of output figure directory here
+CONN_DATA_DIR = os.path.join(PROJ_DIR, 'data', 'connectivity','MEA-Mecp2_2020_0.95_thr')
+NET_DATA_DIR = os.path.join(PROJ_DIR, 'data', 'network_metrics','MEA-Mecp2_2022')
+METADATA = "Mecp2_2022_dataset_conn2res.xlsx"
+dataset = "MEA-Mecp2_2022"
 today = date.today()
 
-dataset = 'MEA-Mecp2_2020_0.9_thr'
-
-metadata = pd.read_excel(os.path.join(DATA_DIR, "Mecp2_2020_dataset.xlsx"),
-            sheet_name="Sheet1", engine="openpyxl")
+# Import metadata
+metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
+            sheet_name="Sheet1", engine="openpyxl") # sheet_name="0.9_thr" sheet_name="0.95_thr"
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
@@ -64,26 +72,26 @@ elif task_name == 'MemoryCapacity':
 idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
-metric = ['rsquare'] # , 'mse', 'nrmse'
+metrics = ['rsquare'] # , 'mse', 'nrmse'
+alphas = np.array([1.0]) # 0.2, 0.8, 1.0, 1.2, 2.0
 
 # Number of random input node selections
-nruns = 1
+nruns = 60
 
-df_subj = [] # initialise
+df_run = [] # initialise
 
-# %%
+# %% Main
 for idx,file in names.iteritems():
     # Import connectivity matrix
     print(
             f'\n*************** file = {file} ***************')
-    conn = reservoir.Conn(w=None, conn_data=f'{file}.csv', conn_data_dir=DATA_DIR) # conn_data=file, file_type='.csv'
-    # TODO: remove reference electrode nodes from adjacency matrix using subset_nodes
+    conn = reservoir.Conn(w=None, conn_data=f'{file}.csv', conn_data_dir=CONN_DATA_DIR)
 
     # scale conenctivity weights between [0,1] and normalize by spectral radius
     try:
         conn.scale_and_normalize()
     except ValueError:
-        input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+        # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
     # generate and fetch data
@@ -96,30 +104,33 @@ for idx,file in names.iteritems():
     # number of features in task data
     n_features = x_train.shape[1]
 
-    for run in range(nruns):
-        # we select a random set of input nodes
-        input_nodes = conn.get_nodes('random', n_nodes=5)
+    # define model for RC ouput
+    model = Ridge(alpha=1e-8, fit_intercept=True)
 
-        # we use cortical regions as output nodes
-        output_nodes = conn.get_nodes('all', nodes_without=input_nodes)
+    for alpha in alphas:
+        print(
+            f'\n----------------------- alpha = {alpha} -----------------------')
 
-        # create input connectivity matrix, which defines the connec-
-        # tions between the input layer (source nodes where the input signal is
-        # coming from) and the input nodes of the reservoir.
-        w_in = np.zeros((n_features, conn.n_nodes))
-        w_in[:, input_nodes] = np.eye(n_features)
+        avg_scores = {m:[] for m in metrics}
+        df_alpha = pd.DataFrame(data = {
+            'index': idx,
+            'name': file,
+            'age': ages[idx],
+            'genotype': genotypes[idx],
+            'alpha': np.round(alpha, 3)},
+            index=[0])
+        
+        for run in range(nruns):
+            # we select a random set of input nodes
+            input_nodes = conn.get_nodes('random', n_nodes=5)
 
-        # define model for RC ouput
-        model = Ridge(alpha=1e-8, fit_intercept=True)
+            # we use cortical regions as output nodes
+            output_nodes = conn.get_nodes('all', nodes_without=input_nodes)
 
-        # evaluate network performance across various dynamical regimes
-        # we do so by varying the value of alpha
-        # alphas = np.array([1.0])
-        alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0])
-        for alpha in alphas:
-            print(
-                f'\n----------------------- alpha = {alpha} -----------------------')
-
+            # create input connectivity matrix
+            w_in = np.zeros((n_features, conn.n_nodes))
+            w_in[:, input_nodes] = np.eye(n_features)
+        
             # instantiate an Echo State Network object
             ESN = reservoir.EchoStateNetwork(w_ih=w_in,
                                                 w_hh=alpha * conn.w,
@@ -137,74 +148,111 @@ for idx,file in names.iteritems():
                 rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
 
             # perform task
-            df, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
+            df_run, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
                                             target=(y_train2, y_test2),
                                             model=model,
-                                            metric=metric
-                                            )
+                                            metric=metrics)
+            
+            df_run['run'] = run
+            #TODO: save df_run
+            for m in metrics: avg_scores[m].append(df_run.at[0, m])
 
-            df['alpha'] = np.round(alpha, 3)
-            df['age'] = ages[idx]
-            df['genotype'] = genotypes[idx]
-            df['run'] = run
-            df['nodes'] = conn.n_nodes
-            N = 200
-            tau = 100
-            # figsize=(19.2, 9.43)
-            # sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
-            # plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
-            #                             figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
-            # plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
-            #                                         figsize=figsize, subplot=(3, 3, 3), block=False)
+            if plot_diagnostics:
+                N = 200
+                tau = 100
+                figsize=(19.2, 9.43)
+                sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
+                plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
+                plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
+                                                        figsize=figsize, subplot=(3, 3, 3), block=False)
 
-            # sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
-            # plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
-            #                             figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
-            # plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
-            #                             figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
-            # plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
-            #                                         ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
+                sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
+                plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
+                plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
+                plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
+                                                        ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
 
-            # plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
-            #                             figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
-            #                             savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
+                plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
+                                            figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
+                                            savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
+        
+        for m in metrics: df_alpha[m] = np.mean(avg_scores[m])
 
-            df_subj.append(df)
-
-df_subj = pd.concat(df_subj, ignore_index=True)
+df_subj = pd.concat(df_alpha, ignore_index=True)
 df_subj.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{nruns}_run.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{nruns}_runs.csv')
 print("Dataframe saved.")
 
-#%% Import dataframe -- COMMENT OUT WHEN RUNNING NEW ANALYSES
-# df_csv = 'mackey_glass_MEA-Mecp2_2022_2022-11-12_3_runs.csv' # name of previously generated .csv dataframe to import for plotting 
-# df_subj = pd.read_csv(os.path.join(PROJ_DIR, 'dataframes', df_csv))
+#%% Import dataframe
+if import_dataframe: 
+    df_subj = pd.read_csv(os.path.join(PROJ_DIR, 'dataframes', dataframe_name))
+
+#%% Import network- and node-level variables
+
+df_network = []
+
+# import .mat files
+for idx,file in names.iteritems():
+    mat_data = mat73.loadmat(os.path.join(NET_DATA_DIR, f'{file}.mat'))['network_metrics']
+    mat_data["index"] = idx
+    df_network.append(mat_data)
+
+# convert to dataframe
+df_network = pd.DataFrame(data=df_network).set_index('index').astype({
+    "aN": "int64",
+    "Dens": "float64",
+    "nMod": "int64",
+    "PL": "float64",
+    "SW": "float64",
+    "SWw": "float64",
+    })
 
 # %% Plotting performance
 
-figsize=(19.2, 9.43)
-for m in metric:
+if plot_perf_curves:
+    figsize=(19.2, 9.43)
     kwargs = {'ages': np.sort(ages.unique()),
     'genotypes': genotypes.unique()}
 
-    # plot genotype comparisons for all ages grouped
-    plotting.plot_performance_curve(
-        df_subj, f'{task_name}_{dataset}_performance_{nruns}_runs', y=m, hue='genotype' # name of column in dataframe to use for grouping
-        , norm=False, figsize=figsize, savefig=True, show=True, block=False)
-    
-    # plot genotype comparisons at each developmental age
-    plotting.plot_performance_curve(df_subj, by_age=True, y=m, hue='genotype',
-    norm=False, figsize=figsize, savefig=True, show=False, block=False,
-    title=f'{task_name}_{dataset}_performance_across_development_{m}_{nruns}_run',
-     **kwargs)
-    
-    # plot change in performance over development at a given alpha
-    alphas = np.array([0.8, 1.0])
-    for alpha in alphas:
-        alpha_data = df_subj[df_subj['alpha'] == alpha].reset_index()
-        plotting.plot_performance_curve(alpha_data, x='age', y=m, hue='genotype',
-        norm=False, figsize=figsize, savefig=True, show=False, block=False,
-        title=f'{task_name}_{dataset}_performance_across_development_for_alpha_{alpha}_{m}_{nruns}_run',
-        **kwargs)
+    # plot performance over runs for each sample at each alpha value
+    for m in metrics:
 
+        # # plot genotype comparisons for all ages grouped
+        # plotting.plot_performance_curve(
+        #     df_subj, title=f'{task_name}_{dataset}_performance_{nruns}_runs', y=m, hue='genotype',
+        #     hue_order=["WT", "HE", "KO"], norm=False, figsize=figsize, savefig=True, show=True, block=False)
+
+        # # plot genotype comparisons at each developmental age
+        # plotting.plot_performance_curve(df_subj, by_age=True, y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
+        # norm=False, figsize=figsize, savefig=True, show=False, block=False,
+        # title=f'{task_name}_{dataset}_performance_across_development_{m}_{nruns}_run',
+        # **kwargs)
+
+        # examine trends at peak performance (alpha = 1.0)
+        alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
+
+        # # plot change in performance over development
+        # plotting.plot_performance_curve(alpha_data, x='age', y=m, hue='genotype', hue_order=["WT", "HE", "KO"],
+        # norm=False, figsize=figsize, savefig=True, show=False, block=False,
+        # title=f'{task_name}_{dataset}_performance_across_development_{m}_{nruns}_runs',
+        # **kwargs)
+
+        # plot linear regression model for performance as a function of network variables
+        network_data = alpha_data.join(df_network, on='index')
+        network_data = network_data.drop(labels=93, axis='index')
+        network_vars = ["nMod"] # "aN", "Dens", "nMod", "PL", "SW", "SWw"
+        node_vars = ["NS", "aveControl", "modalControl", "BC", "PC"]
+        for v in network_vars:
+            plotting.plot_perf_reg(df=network_data,x=v,title=f'{task_name}_{dataset}_{m}_perf__vs_{v}_{nruns}_runs',
+                y=m,hue='genotype',savefig=True)
+        
+        # # plot cumulative mean performance over runs at given alpha value(s)
+        # for idx,file in names.iteritems():
+        #     sample_alpha_data = alpha_data[df_subj['index'] == idx]
+        #     sample_alpha_data['cum_avg_perf'] = sample_alpha_data[m].expanding().mean()
+        #     plotting.plot_performance_curve(sample_alpha_data, title=f'{task_name}_{dataset}_{file}_{alpha}_performance_over_{nruns}_runs',
+        #     x='run', y='cum_avg_perf',savefig = True)
 # %%

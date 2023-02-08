@@ -9,6 +9,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+plt.rcParams.update({'font.size': 20})
 import numpy as np
 from numpy.linalg import svd, norm
 import math
@@ -19,35 +20,6 @@ today = date.today()
 FIG_DIR = os.path.join(PROJ_DIR, 'figs', today.strftime("%d%b%Y"))
 if not os.path.isdir(FIG_DIR):
     os.makedirs(FIG_DIR)
-
-def round_decimals_up(number:float, decimals:int=2):
-    """
-    Returns a value rounded up to a specific number of decimal places.
-    """
-    if not isinstance(decimals, int):
-        raise TypeError("decimal places must be an integer")
-    elif decimals < 0:
-        raise ValueError("decimal places has to be 0 or more")
-    elif decimals == 0:
-        return math.ceil(number)
-
-    factor = 10 ** decimals
-    return math.ceil(number * factor) / factor
-
-def round_decimals_down(number:float, decimals:int=2):
-    """
-    Returns a value rounded down to a specific number of decimal places.
-    """
-    if not isinstance(decimals, int):
-        raise TypeError("decimal places must be an integer")
-    elif decimals < 0:
-        raise ValueError("decimal places has to be 0 or more")
-    elif decimals == 0:
-        return math.floor(number)
-
-    factor = 10 ** decimals
-    return math.floor(number * factor) / factor
-
 
 class PCA:
     """
@@ -142,10 +114,10 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
 
 
 def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, savefig=False, show=False, block=True, **kwargs):
+                           norm=False, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
-    fig = plt.figure(figsize=(19.2, 9.43))
+    fig = plt.figure(figsize=figsize)
 
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
@@ -167,6 +139,7 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
         plot_legend = True
         for DIV in ages:
             ax = plt.subplot(2, 3, age_point)
+            # ax = plt.subplot(2, 2, age_point)
             age_data = df[df['age'] == DIV]
             plot = sns.lineplot(data=age_data, x=x, y=y,
                         hue=hue,
@@ -189,7 +162,6 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                         palette=palette,
                         markers=True,
                         ax=ax)
-
     if ylim is not None:
         plt.ylim(ylim)
     sns.despine(offset=10, trim=True)
@@ -202,6 +174,35 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
     # plt.close()
+
+def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT", "HE", "KO"], figsize=(19.2, 9.43),
+    savefig=False, show=False, block=True, **kwargs):
+    sns.set(style="ticks", font_scale=1.0)
+
+    if hue is not None:
+        n_modules = len(np.unique(df[hue]))
+        palette = sns.color_palette('husl', n_modules+1)[:n_modules]
+
+        if hue_order is None and isinstance(df[hue][0], str):
+            if 'VIS' in list(np.unique(df[hue])):
+                hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
+            elif "WT" in list(np.unique(df[hue])):
+                hue_order = ["WT", "HE", "KO"]
+
+    g = sns.lmplot(data=df,
+                x=x,
+                y=y,
+                markers=True,
+                hue=hue,
+                hue_order=hue_order,
+                palette=palette)
+
+    sns.despine(offset=10, trim=True)
+    g.fig.suptitle(title, fontsize=20)
+    if savefig:
+        g.fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+                    transparent=True, bbox_inches='tight', dpi=300)
+    if show: plt.show(block=block)
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None,
                      cmap=None, scaler=1, num=1, figsize=(12, 6), subplot=None, title=None, fname='time_course',
@@ -232,12 +233,9 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
                              
         # add x and y limits
         plt.xlim(xlim)
-        y_min = round_decimals_down(np.min(x),1)
-        y_max = round_decimals_up(np.max(x),1)
+
         if ylim is not None:
             plt.ylim(ylim)
-        else:
-            plt.ylim([y_min, y_max])
 
         # plot legend
         if legend_label is not None:
@@ -274,7 +272,6 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
     # plt.close()
-
 
 def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=[0, 150],
                             cmap='viridis', cbar_norm='norm', cbar_pad=0.02,
@@ -328,7 +325,7 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
     plt.show(block=block)
 
 
-def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=None, model=None, **kwargs):
+def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=1, model=None, **kwargs):
 
     if feature_set == 'pc':
         # transform data into principal components

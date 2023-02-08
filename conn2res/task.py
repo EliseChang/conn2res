@@ -386,11 +386,13 @@ def run_task(reservoir_states, target, metric, **kwargs):
         functions:
             memory_capacity_task(); delays=None, t_on=0
             pattern_recognition_task(); pttn_lens
-
+            conn2res.coding.encoder(); return_score=False
     Returns
     -------
     df_res : pandas.DataFrame
         data frame with task scores
+    model
+    s
     """
 
     # print('\n PERFORMING TASK ...')

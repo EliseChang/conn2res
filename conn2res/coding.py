@@ -63,6 +63,7 @@ def encoder(reservoir_states, target,
     -------
     df_encoding : pandas.DataFrame
         data frame with task scores
+    model : 
 
     """
 
@@ -103,16 +104,11 @@ def encoder(reservoir_states, target,
         df_encoding, model = run_task(reservoir_states=(
             reservoir_states[0][:, readout_nodes], reservoir_states[1][:, readout_nodes]), target=target, metric=metric, **kwargs)
 
-        df_encoding['n_nodes'] = len(readout_nodes)
-
     else:
         df_encoding, model = run_task(reservoir_states=reservoir_states,
                                       target=target, metric=metric, **kwargs)
 
-    if return_model:
-        return df_encoding, model
-    else:
-        return df_encoding
+    return df_encoding, model
 
 
 def time_average_samples(seq_len, data, sample_weight, operation=None):

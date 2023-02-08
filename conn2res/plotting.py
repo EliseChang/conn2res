@@ -6,6 +6,7 @@ Plotting functions
 """
 import os
 import seaborn as sns
+sns.set(style="ticks", font_scale=2.0)
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -114,12 +115,12 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
 
 
 def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, norm_method=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
+                           norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
     fig = plt.figure(figsize=figsize)
 
-    if hue is not None:
+    if palette is None and hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
@@ -130,26 +131,13 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                 hue_order = ["WT", "HE", "KO"]
 
     if norm:
+        df[y] = df[y] / df[norm_var]
 
-        if norm_method == "total_spikes":
-            df['normalised_score'] = df[y] / df["numNspikes"]
-        elif norm_method == "channel_avg_spikes":
-            df['normalised_score'] = df[y] / df["channelavgnumspikes"]
-
-        max_score = max(df['normalised_score'])
-        min_score = min(df['normalised_score'])
-        df['normalised_score'] = (df['normalised_score'] - min_score) / (max_score - min_score)
-
-        ax = fig.add_subplot()
-        plot = sns.lineplot(data=df, x=x, y='normalised_score',
-                        hue=hue,
-                        hue_order=hue_order,
-                        palette=palette,
-                        marker='o',
-                        ax=ax)
+        max_score = max(df[y])
+        min_score = min(df[y])
+        df[y] = (df[y] - min_score) / (max_score - min_score)
     
-    elif by_age:
-        
+    if by_age:     
         ages = kwargs.get('ages')
         age_point = 1
         plot_legend = True
@@ -179,8 +167,7 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                         markers=True,
                         ax=ax)
     
-    if ylim is not None:
-        plt.ylim(ylim)
+    if ylim is not None: plt.ylim(ylim)
     sns.despine(offset=10, trim=True)
 
     plt.legend(title=hue, loc='upper right')
@@ -192,9 +179,8 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT", "HE", "KO"], figsize=(19.2, 9.43),
-    savefig=False, show=False, block=True, **kwargs):
-    sns.set(style="ticks", font_scale=1.0)
+def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT", "HE", "KO"],
+    figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
 
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
@@ -223,7 +209,7 @@ def plot_perf_reg(df, x, title=None, y='rsquare', hue='genotype', hue_order=["WT
     if show: plt.show(block=block)
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None,
-                     cmap=None, scaler=1, num=1, figsize=(12, 6), subplot=None, title=None, fname='time_course',
+                     cmap=None, scaler=1, num=1, figsize=(19.2, 9.43), subplot=None, title=None, fname='time_course',
                      legend_label=None, savefig=False, show=False, block=True, **kwargs):
 
     # transform data
@@ -293,7 +279,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
 
 def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=[0, 150],
                             cmap='viridis', cbar_norm='norm', cbar_pad=0.02,
-                            num=1, figsize=(12, 6), subplot=None, title=None, fname='time_course_raster',
+                            num=1, figsize=(19.2, 9.43), subplot=None, title=None, fname='time_course_raster',
                             savefig=False, block=True, **kwargs):
 
     # transform data
@@ -342,6 +328,51 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
                     transparent=True, bbox_inches='tight', dpi=300)
     plt.show(block=block)
 
+def boxplot(x, y, df, title=None, hue=None, hue_order=None, palette=None, orient='v', \
+            width=0.8, linewidth=1, xlim=None, x_major_loc=None, ylim=None,  y_major_loc=None,\
+            legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
+
+    fig = plt.figure(figsize=figsize)
+    ax = plt.subplot()
+
+    if palette is None and hue is not None:
+        n_modules = len(np.unique(df[hue]))
+        palette = sns.color_palette('husl', n_modules+1)[:n_modules]
+
+    plot = sns.boxplot(x=x, y=y,
+                        data=df,
+                        palette=palette,
+                        hue=hue,
+                        hue_order=hue_order,
+                        orient=orient,
+                        width=width,
+                        linewidth=linewidth,
+                        ax=ax,
+                        **kwargs
+                        )
+
+    #  for patch in axis.artists:
+    #      r, g, b, a = patch.get_facecolor()
+    #      patch.set_facecolor((r, g, b, 0.9))
+
+    if legend: ax.legend(fontsize=16, frameon=True, ncol=1, loc='best')
+
+    if title is not None: ax.set_title(title)
+    if xlim is not None: ax.set_ylim(xlim)
+    #  if x_major_loc is not None: ax.xaxis.set_major_locator(MultipleLocator(x_major_loc))
+
+    if ylim is not None: ax.set_ylim(ylim)
+    #  if y_major_loc is not None: ax.yaxis.set_major_locator(MultipleLocator(y_major_loc))
+
+    sns.despine(offset=10, trim='False')
+
+    # set tight layout in case there are different subplots
+    plt.tight_layout()
+
+    if savefig:
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+                    transparent=True, bbox_inches='tight', dpi=300)
+    if show: plt.show(block=block)
 
 def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=1, model=None, **kwargs):
 

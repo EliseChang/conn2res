@@ -17,8 +17,6 @@ import warnings
 import matplotlib.pyplot as plt
 from datetime import date
 plt.ioff() # turn off interactive mode
-import networkx as nx
-import scipy.io as sio
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
@@ -27,17 +25,17 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Metaparameters
 import_dataframe = 1
-dataframe_name = 'mackey_glass_MEA-Mecp2_2022_dataset_conn2res_2023-01-23_10_runs.csv' # name of previously generated .csv dataframe to import for plotting
+dataframe_name = 'mackey_glass_MEA-Mecp2_2020_dataset_conn2res_2023-02-01_50_runs.csv' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
 reduce = 1
 plot_diagnostics = 0
 plot_perf_curves = 1
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dataset = "MEA-Mecp2_2022_dataset_conn2res"
+dataset = "MEA-Mecp2_2020_dataset_conn2res"
 CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity', dataset)
-NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_26Dec2022.csv')
-EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
+# NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
+# EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
 METADATA = f"{dataset}.xlsx"
 
 # Today's date for saving objects
@@ -45,35 +43,32 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-            sheet_name="Sheet1", engine="openpyxl")
+            sheet_name="0.95_thr_red", engine="openpyxl") # "0.95_thr"
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
+
+# Input node selection
+n_input_nodes = 5
+n_output_nodes = 5
+nruns = 50
 
 # Get trial-based dataset for task
 task_name = 'mackey_glass'
 
 if task_name == 'mackey_glass':
-    tau = 17
-    horizon = 15
+    tau = 30
+    horizon = 30
     kwargs = {'n_timesteps': 4000, 'tau': tau, 'horizon': horizon}
 elif task_name == 'MemoryCapacity':
     horizon = -25
     kwargs = {'n_timesteps': 4000, 'horizon': horizon}
-elif task_name == 'spatial_classification':
-    kwargs = {}
-elif task_name == 'temporal_classification':
-    kwargs = {}
 
 idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
 metrics = ['score'] # , 'mse', 'nrmse'
-alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.linspace(0.2, 3.0, num=15)
-
-# Input node selection
-n_input_nodes = 5
-nruns = 10
+alphas = np.linspace(0.2, 3.0, num=15) # np.array([0.2, 0.8, 1.0, 1.2, 2.0])
 
 # %% Main
 
@@ -89,14 +84,14 @@ for idx,file in names.iteritems():
     conn = reservoir.Conn(w=None, conn_data=f'{file}.csv', conn_data_dir=CONN_DATA)
     if reduce: conn.reduce()
 
-    if conn.n_nodes <= n_input_nodes:
+    if conn.n_nodes < n_input_nodes + n_output_nodes:
         input("Cannot implement network. Total nodes must be greater than specified input nodes.  Press Enter to continue.")
         continue
     # scale conenctivity weights between [0,1] and normalize by spectral radius
     try:
         conn.scale_and_normalize()
     except ValueError:
-        # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+        input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
     # generate and fetch data
@@ -125,10 +120,16 @@ for idx,file in names.iteritems():
 
         scores = {m:[] for m in metrics}
 
+        # # find rho
+        # from scipy.linalg import eigh
+        # ew, _ = eigh(conn.w)
+        # rho = np.abs(ew.max())
+
         alpha_dict = {
             'name': file,
             'age': ages[idx],
             'genotype': genotypes[idx],
+            # 'rho': rho,
             'alpha': np.round(alpha, 3),
             'regime': regime}
         
@@ -144,7 +145,7 @@ for idx,file in names.iteritems():
             #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes,nodes_from=input_subset)
 
             input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
-            output_nodes = conn.get_nodes('all', nodes_without=input_nodes)
+            output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_nodes)
 
             # create input connectivity matrix
             w_in = np.zeros((n_features, conn.n_nodes))
@@ -152,7 +153,7 @@ for idx,file in names.iteritems():
         
             # instantiate an Echo State Network object
             ESN = reservoir.EchoStateNetwork(w_ih=w_in,
-                                                w_hh=alpha * conn.w,
+                                                w_hh=conn.w * alpha,
                                                 activation_function='tanh',
                                                 #  input_gain=10.0,
                                                 input_nodes=input_nodes,
@@ -162,6 +163,12 @@ for idx,file in names.iteritems():
             # simulate reservoir states; select only output nodes.
             rs_train = ESN.simulate(ext_input=x_train)
             rs_test = ESN.simulate(ext_input=x_test)
+
+            # plot reservoir activity before washout
+            # plotting.plot_time_series_raster(rs_train, xlim=[0,len(rs_train)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_training",
+            #                 savefig=True, block=True)
+            # plotting.plot_time_series_raster(rs_test, xlim=[0,len(rs_test)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_testing",
+            #                 savefig=True, block=True)
 
             rs_train, rs_test, y_train2, y_test2 = ESN.add_washout_time(
                 rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
@@ -197,7 +204,7 @@ for idx,file in names.iteritems():
                                             savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
         
         for m in metrics: alpha_dict[m] = np.mean(scores[m])
-        subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() # | network_data.iloc[idx].to_dict()
+        subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() | network_data.iloc[idx].to_dict())
 
 df_subj = pd.DataFrame(subj_ls)
 df_subj.to_csv(
@@ -219,35 +226,26 @@ if plot_perf_curves:
     for m in metrics:
 
         plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="genotype", hue_order=["WT", "HE", "KO"],
-        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}', **kwargs)
-           
-        # plot genotype comparisons for dynamical regimes
-        plotting.boxplot(x='regime', y=m, df=df_subj, hue='genotype', hue_order=["WT", "HE", "KO"],
-            ylim=[0,1], figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_boxplots')
+        figsize=figsize, savefig=True, legend=False, title=f'{task_name}_{dataset}_performance_{m}',**kwargs)
 
         # plot genotype comparisons at each developmental age
         plotting.plot_performance_curve(df_subj, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
         figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
         **kwargs)
 
-        # # plot performance normalised by energetic cost metrics
-        # plotting.plot_performance_curve(df_subj, y=m, xlim=[min(alphas), max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
-        # norm=True, norm_var= "meanspikes", figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_normalised_by_channel_average_spikes',
-        # **kwargs)
-
         # examine trends at peak performance (alpha = 1.0)
         alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
 
         # plot change in performance over development
         plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
-        hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False,
-        title=f'{task_name}_{dataset}_performance_across_development_{m}',
-        **kwargs)
+        hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False, legend=False,
+        title=f'{task_name}_{dataset}_performance_across_development_{m}',**kwargs)
 
         # linear regression model for performance as a function of network and electrophysiological variables
-        network_vars = ["size"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        ephys_vars = ['meanspikes', 'FRmean'] # ['meanspikes','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+        network_vars = ['size'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
          
-        for v in [network_vars, ephys_vars]:
+        for v in network_vars: #+ ephys_vars:
             plotting.plot_perf_reg(alpha_data, x=v,
-                y=m,hue='genotype',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+                y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+# %%

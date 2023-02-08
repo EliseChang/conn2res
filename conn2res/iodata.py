@@ -9,7 +9,7 @@ import os
 from re import I
 import pandas as pd
 import numpy as np
-import math
+import random
 import neurogym as ngym
 from reservoirpy import datasets
 
@@ -71,8 +71,13 @@ RESERVOIRPY_TASKS = [
     'rossler'
 ]
 
-STIMULATION_TASKS = [
+STIMULATION_REGRESSION_TASKS = [
     'organoid_stim_220725'
+]
+
+STIMULATION_CLASSIFICATION_TASKS = [
+    'spatial_classification_v0',
+    'temporal_classification_v0'
 ]
 
 def load_file(file_name, data_dir, file_type=None):
@@ -92,7 +97,7 @@ def load_file(file_name, data_dir, file_type=None):
 
 
 def get_available_tasks():
-    return NEUROGYM_TASKS + NATIVE_TASKS + RESERVOIRPY_TASKS
+    return NEUROGYM_TASKS + NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_REGRESSION_TASKS + STIMULATION_CLASSIFICATION_TASKS
 
 
 def unbatch(x):
@@ -168,9 +173,11 @@ def fetch_dataset(task, horizon=None, **kwargs):
         # create a conn2res Dataset
         return create_neurogymn_dataset(task, **kwargs)
 
-    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_TASKS:
+    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_REGRESSION_TASKS:
         # create a conn2res Dataset
-        return create_dataset(task, horizon, **kwargs)
+        return create_regression_dataset(task, horizon, **kwargs)
+    elif task in STIMULATION_CLASSIFICATION_TASKS:
+        return create_classification_dataset(task, **kwargs)
 
 
 def create_neurogymn_dataset(task, n_trials=100, add_constant=False, **kwargs):
@@ -222,7 +229,7 @@ def create_neurogymn_dataset(task, n_trials=100, add_constant=False, **kwargs):
         return inputs, labels
 
 
-def create_dataset(task, horizon, n_timesteps=1000, **kwargs):
+def create_regression_dataset(task, horizon, n_timesteps=1000, **kwargs):
 
     # make sure horizon is a list
     if isinstance(horizon, int):
@@ -249,7 +256,7 @@ def create_dataset(task, horizon, n_timesteps=1000, **kwargs):
         n_timesteps = n_timesteps + horizon_max
         x = func(n_timesteps=n_timesteps, **kwargs)
 
-    elif task in STIMULATION_TASKS:
+    elif task in STIMULATION_REGRESSION_TASKS:
         n_timesteps = n_timesteps + horizon_max
         x = load_file(file_name=f'{task}.csv', data_dir=TASK_DIR)[:n_timesteps]
 
@@ -263,6 +270,21 @@ def create_dataset(task, horizon, n_timesteps=1000, **kwargs):
             return y, x
         else:
             raise ValueError('positive horizon should be integer not list')
+
+def random_pattern_sequence(n_patterns, n_trials):
+    
+    order = np.tile(np.arange(n_patterns), n_trials)
+    rand_order = random.sample(range(n_patterns*n_trials),n_patterns*n_trials)
+    sequence = np.array([order[i] for i in rand_order])
+    return sequence
+
+def create_classification_dataset(task, n_timesteps, ITI, **kwargs):
+    if task == "spatial_classification_v0":
+        x = np.concatenate([np.ones(n_timesteps),np.zeros(ITI)])[:,np.newaxis]
+        # y = np.array([np.repeat(trial,n_timesteps)[:,np.newaxis] for trial in sequence])
+    # elif task == "temporal_classification_v0":
+
+    return x
 
 
 def split_dataset(*args, frac_train=0.7, axis=0, n_train=None):

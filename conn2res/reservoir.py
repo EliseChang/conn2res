@@ -65,6 +65,10 @@ class Conn:
 
         # indexes of set of active nodes
         self.idx_node = np.full(self.n_nodes, True)
+
+        # spectral radius
+        ew, _ = eigh(self.w)
+        self.spectral_radius = np.abs(ew).max()
     
     def reduce(self):
         """ Make sure that all nodes are connected to the rest of the network"""
@@ -103,8 +107,7 @@ class Conn:
         """
 
         # divide connectivity matrix by spectral radius
-        ew, _ = eigh(self.w)
-        self.w = self.w / np.abs(ew).max()
+        self.w = self.w / self.spectral_radius
 
     def binarize(self):
         """
@@ -465,6 +468,7 @@ class EchoStateNetwork(Reservoir):
 
         # select output nodes and remove initial condition (to match the time index of
         # _state and ext_input)
+        # self._state = self._state[1:,:]
         self._state = self._state[1:, self.output_nodes]
 
         return self._state

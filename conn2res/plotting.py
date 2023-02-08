@@ -6,7 +6,6 @@ Plotting functions
 """
 import os
 import seaborn as sns
-sns.set(style="ticks", font_scale=2.0)
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -114,7 +113,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     # plt.close()
 
 
-def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
+def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None,
                            xlim=None, legend=True,ticks=None, markers=False,norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
@@ -175,9 +174,11 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
     plt.legend(title=hue, loc='upper right')
 
     if xlim is not None: plt.xlim(xlim)
-    if ticks is not None: plt.xticks(ticks, fontsize=22)
-    else: plt.xticks(fontsize=22)
-    plt.yticks(fontsize=22)
+    plt.xlabel(x, fontsize=24)
+    plt.ylabel(ylabel, fontsize=24)
+    if ticks is not None: plt.xticks(ticks, fontsize=20)
+    else: plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
 
     sns.despine()
 
@@ -189,39 +190,43 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='score', ylim=[0,1], hue='genotype', hue_order=["WT", "HE", "KO"],
+def plot_perf_reg(df, x, title=None, y='score', xlim=None, ticks=None, ylim=None, hue='genotype', hue_order=["WT", "HE", "KO"],
     figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
+
+    plt.figure(figsize=figsize)
 
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-        if hue_order is None and isinstance(df[hue][0], str):
-            if 'VIS' in list(np.unique(df[hue])):
-                hue_order = ['VIS', 'SM', 'DA', 'VA', 'LIM', 'FP', 'DMN']
-            elif "WT" in list(np.unique(df[hue])):
+        if hue_order and "WT" in list(np.unique(df[hue])):
                 hue_order = ["WT", "HE", "KO"]
-
+    
     g = sns.scatterplot(data=df,
                 x=x,
                 y=y,
                 markers=True,
-                legend=False,
+                legend=True,
                 hue=hue,
                 hue_order=hue_order,
                 palette=palette)
                 #,ci=None)
 
+    fig = g.get_figure()
     sns.despine()
+
+    if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
     plt.ylim(ylim)
-    plt.yticks(fontsize=16)
-    plt.xticks(fontsize=16)
-    # g.fig.suptitle(title, fontsize=20)
+    plt.yticks(fontsize=20)
+    if ticks is not None: plt.xticks(ticks, fontsize=20)
+    else: plt.xticks(fontsize=20)
+    plt.xlabel(x,fontsize=24)
+    plt.ylabel(y,fontsize=24)
+    # g.suptitle(title, fontsize=24)
+
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-        # g.fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-        #             transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None, xticks=None, yticks=None,
@@ -293,9 +298,9 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=[0, 150],
+def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=None,
                             cmap='viridis', cbar_norm='norm', cbar_pad=0.02,
-                            num=1, figsize=(19.2, 9.43), subplot=None, title=None, fname='time_course_raster',
+                            num=1, figsize=(19.2, 9.43), subplot=None, title=None,
                             savefig=False, block=True, **kwargs):
 
     # transform data
@@ -340,12 +345,12 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
         plt.title(f'{title} time course', fontsize=22)
 
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
-    plt.show(block=block)
+    # plt.show(block=block)
 
-def boxplot(x, y, df, title=None, hue=None, hue_order=None, palette=None, orient='v', \
-            width=0.8, linewidth=1, xlim=None, x_major_loc=None, ylim=None,  y_major_loc=None,\
+def boxplot(x, y, df, ylabel="R squared", yticks=None, xticks=None, title=None, hue=None, hue_order=None, palette=None, orient='v', \
+            width=0.5, linewidth=1, xlim=None, ylim=None,\
             legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
 
     fig = plt.figure(figsize=figsize)
@@ -371,14 +376,20 @@ def boxplot(x, y, df, title=None, hue=None, hue_order=None, palette=None, orient
     #      r, g, b, a = patch.get_facecolor()
     #      patch.set_facecolor((r, g, b, 0.9))
 
-    if legend: ax.legend(fontsize=16, frameon=True, ncol=1, loc='best')
+    if legend: ax.legend(fontsize=24, frameon=True, ncol=1, loc='best')
 
-    if title is not None: ax.set_title(title)
-    if xlim is not None: ax.set_ylim(xlim)
-    #  if x_major_loc is not None: ax.xaxis.set_major_locator(MultipleLocator(x_major_loc))
+    if title is not None: ax.set_title(title, fontsize=24)
+    
+    if ylim is not None: plt.ylim(ylim)
+    if xlim is not None: plt.xlim(xlim)
 
-    if ylim is not None: ax.set_ylim(ylim)
-    #  if y_major_loc is not None: ax.yaxis.set_major_locator(MultipleLocator(y_major_loc))
+    plt.xlabel(x, fontsize=24)
+    plt.ylabel(ylabel, fontsize=24)
+
+    if xticks is not None: plt.xticks(xticks, fontsize=20)
+    else: plt.xticks(fontsize=20)
+    if yticks is not None: plt.yticks(yticks, fontsize=20)
+    else: plt.yticks(fontsize=20)
 
     sns.despine()
 

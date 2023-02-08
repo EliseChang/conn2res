@@ -420,7 +420,7 @@ class EchoStateNetwork(Reservoir):
         self.w_ih[:, self.input_nodes] = self.input_gain * \
             self.w_ih[:, self.input_nodes]
 
-    def simulate(self, ext_input, ic=None, threshold=0.5):
+    def simulate(self, ext_input, ic=None, noise=False, threshold=0.5, **kwargs):
         """
         Simulates reservoir dynamics given an external input signal
         'ext_input'
@@ -458,20 +458,51 @@ class EchoStateNetwork(Reservoir):
         if ic is not None:
             self._state[0, :] = ic
 
+        if noise:
+            delta_V, quantiles = kwargs.pop('noise_distribution')
+            samples = np.random.uniform(min(quantiles),max(quantiles),size=(self.hidden_size,1,len(timesteps)+1))
+            quantiles_mat = np.repeat(quantiles[np.newaxis,:,np.newaxis], len(timesteps)+1, axis=2)
+            bin_idx = np.argmin(np.abs(quantiles_mat-samples),axis=1)
+            beta = delta_V[bin_idx]
+
         # simulation of the dynamics
         for t in timesteps:
 
             # if (t>0) and (t%100 == 0): print(f'\t ----- timestep = {t}')
-            synap_input = np.dot(
-                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih) # why is this t-1
+            if noise:
+                synap_input = np.dot(
+                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih) + beta[:,t-1]
+            else:
+                synap_input = np.dot(
+                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih)
+            
             self._state[t, :] = self.activation_function(synap_input)
 
         # select output nodes and remove initial condition (to match the time index of
         # _state and ext_input)
-        # self._state = self._state[1:,:]
-        self._state = self._state[1:, self.output_nodes]
+        self._state = self._state[1:,:]
+        # self._state = self._state[1:, self.output_nodes]
 
         return self._state
+    
+    def set_initial_condition(self, **kwargs):
+        """Sets initial reservoir state based on inverse cumulative probability distribution of MEA-recorded extracellular potential
+
+        Parameters
+        ----------
+        voltages: vector of bin edges for cumulative probability distribution
+        quantiles: vector of cumulative probability values associated with each voltage bin
+
+        Returns
+        -------
+        self.ic: (1, N) numpy.ndarray
+            initial activation states of reservoir
+        """
+        voltages, quantiles = kwargs.pop('voltage_distribution')
+        samples = np.random.uniform(min(quantiles),max(quantiles),size=(self.hidden_size,1))
+        bin_idx = np.argmin(np.abs(quantiles[np.newaxis,:]-samples),axis=1)
+        self.ic = voltages[bin_idx]
+        return self.ic
 
     def set_activation_function(self, function):
 

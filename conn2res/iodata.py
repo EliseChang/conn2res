@@ -71,10 +71,6 @@ RESERVOIRPY_TASKS = [
     'rossler'
 ]
 
-STIMULATION_REGRESSION_TASKS = [
-    'organoid_stim_220725'
-]
-
 STIMULATION_CLASSIFICATION_TASKS = [
     'spatial_classification_v0',
     'temporal_classification_v0'
@@ -97,7 +93,7 @@ def load_file(file_name, data_dir, file_type=None):
 
 
 def get_available_tasks():
-    return NEUROGYM_TASKS + NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_REGRESSION_TASKS + STIMULATION_CLASSIFICATION_TASKS
+    return NEUROGYM_TASKS + NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_CLASSIFICATION_TASKS
 
 
 def unbatch(x):
@@ -173,7 +169,7 @@ def fetch_dataset(task, horizon=None, **kwargs):
         # create a conn2res Dataset
         return create_neurogymn_dataset(task, **kwargs)
 
-    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_REGRESSION_TASKS:
+    elif task in NATIVE_TASKS + RESERVOIRPY_TASKS:
         # create a conn2res Dataset
         return create_regression_dataset(task, horizon, **kwargs)
     elif task in STIMULATION_CLASSIFICATION_TASKS:
@@ -256,9 +252,9 @@ def create_regression_dataset(task, horizon, n_timesteps=1000, **kwargs):
         n_timesteps = n_timesteps + horizon_max
         x = func(n_timesteps=n_timesteps, **kwargs)
 
-    elif task in STIMULATION_REGRESSION_TASKS:
-        n_timesteps = n_timesteps + horizon_max
-        x = load_file(file_name=f'{task}.csv', data_dir=TASK_DIR)[:n_timesteps]
+    # elif task in STIMULATION_REGRESSION_TASKS:
+    #     n_timesteps = n_timesteps + horizon_max
+    #     x = load_file(file_name=f'{task}.csv', data_dir=TASK_DIR)[:n_timesteps]
 
     y = np.hstack([x[horizon_max-h:-h] for h in horizon])
     x = x[horizon_max:]

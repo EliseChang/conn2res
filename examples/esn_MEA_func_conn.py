@@ -25,7 +25,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Metaparameters
 import_dataframe = 1
-dataframe_name = 'mackey_glass_MEA-Mecp2_2020_dataset_conn2res_2023-02-01_50_runs.csv' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
+dataframe_name = 'mackey_glass_MEA-Mecp2_2020_dataset_conn2res_2023-01-30_50_runs_output_subset_unscaled_reduced.csv' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
 reduce = 1
 plot_diagnostics = 0
 plot_perf_curves = 1
@@ -242,10 +242,10 @@ if plot_perf_curves:
         title=f'{task_name}_{dataset}_performance_across_development_{m}',**kwargs)
 
         # linear regression model for performance as a function of network and electrophysiological variables
-        network_vars = ['size'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        network_vars = ['rho'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
         # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
          
         for v in network_vars: #+ ephys_vars:
-            plotting.plot_perf_reg(alpha_data, x=v,
+            plotting.plot_perf_reg(df_subj, x=v, xlim=[0,15], ylim=[0,1],ticks=[0,1,5,10,15],
                 y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
 # %%

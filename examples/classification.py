@@ -24,8 +24,8 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # %% Set global variables
 
 # Metaparameters
-import_dataframe = 1
-dataframe_name = 'spatial_classification_v0_MEA-Mecp2_2022_dataset_conn2res_2023-02-02_100_trials_5_output_nodes.csv' # name of previously generated .csv dataframe
+import_dataframe = 0
+dataframe_name = '' # name of previously generated .csv dataframe
 plot_diagnostics = 0
 plot_perf_curves = 1
 
@@ -47,6 +47,13 @@ names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
 
+# Import distribution of extracellular potential, V, and spontaneous changes in this variable
+# for modelling initial reservoir condition
+voltage_distribution = pd.read_csv(os.path.join(PROJ_DIR,'data',"culture_voltage_distribution.csv"),
+                                   header=None).to_numpy()
+noise_distribution = pd.read_csv(os.path.join(PROJ_DIR,'data',"culture_noise_distribution.csv"),
+                                 header=None).to_numpy()
+
 # Get trial-based dataset for task
 frac_train=0.8
 
@@ -55,25 +62,22 @@ task_name = 'spatial_classification_v0'
 if task_name == 'spatial_classification_v0':
     n_patterns = 2
     n_pres = 50 # number of presentations of each pattern
-    kwargs = {'n_timesteps': 250, 'ITI': 0}
+    kwargs = {'n_timesteps': 250,
+              'ITI': 0,
+              'voltage_distribution': (voltage_distribution[0,:],voltage_distribution[1,:]),
+              'noise_distribution': (noise_distribution[0,:],noise_distribution[1,:])}
+    
 elif task_name == 'temporal_classification_v0':
     kwargs = {}
 
 # Input node selection
-
-random_input = False
-if random_input:
-    n_input_nodes = 5
-    n_trials = 10
-
-fixed_input = True
-if fixed_input:
-    n_input_nodes = 1 # number of nodes in each pattern
-    input_patterns = np.array([[0],[1]])
-    input_set = np.concatenate(input_patterns)
+input_patterns = np.array([[21],[10]])
+input_set = np.concatenate(input_patterns)
+n_input_nodes = len(input_set) # total number of nodes used for input across all patterns -- do not select any of these for output
+input_sf = 5
     
-n_output_nodes = 5
-output_nodes = np.array([58,57,56,55,54])
+output_nodes = np.array([40, 42, 45, 49, 51]) # last column
+n_output_nodes = len(output_nodes)
 
 n_trials = n_patterns*n_pres
 n_training_trials = round(n_pres*frac_train) # for each pattern
@@ -82,7 +86,7 @@ n_testing_trials = round(n_pres*(1-frac_train)) # for each pattern
 idx_washout = 50
 
 # Metrics to evaluate the regression model for RC output
-metrics = ['score'] # , 'mse', 'nrmse'
+metrics = ['score']
 alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.linspace(0.2, 3.0, num=15)
 
 fig_num = 1
@@ -94,8 +98,8 @@ df_sample_ls = [] # initialise list to contain dictionaries for each alpha trial
 # network_data = pd.read_csv(NET_DATA)
 
 # generate and fetch data
-x = iodata.fetch_dataset(task_name, **kwargs)
-
+x = iodata.fetch_dataset(task_name, **kwargs) * input_sf
+# x = np.zeros((250,1)) # testing spontaneous activity
 y_train = iodata.random_pattern_sequence(n_patterns, n_training_trials)
 y_test = iodata.random_pattern_sequence(n_patterns, n_testing_trials)
 y = np.concatenate([y_train, y_test])
@@ -104,7 +108,7 @@ y = np.concatenate([y_train, y_test])
 n_features = x.shape[1]
 
 # define model for RC ouput
-model = RidgeClassifier(alpha=1e-8, fit_intercept=True)
+model = RidgeClassifier(alpha=1e-8, fit_intercept=True) # LogisticRegression()
 
 for idx,file in names.iteritems():
 
@@ -112,21 +116,18 @@ for idx,file in names.iteritems():
     print(
             f'\n*************** file = {file} ***************')
     conn = reservoir.Conn(w=None, conn_data=f'{file}.csv', conn_data_dir=CONN_DATA)
-    
+
     conn.reduce()
 
-    if random_input and conn.n_nodes < n_input_nodes + n_output_nodes:
-        input("Cannot implement network. Total nodes must be greater than specified input nodes. Press Enter to continue.")
-        continue
-    if fixed_input and conn.n_nodes != 59:
+    if conn.n_nodes != 59:
         input("Cannot implement network. Not fully connected. Press Enter to continue.")
         continue
-    
+
     # scale conenctivity weights between [0,1] and normalize by spectral radius
     try:
         conn.scale_and_normalize()
     except ValueError:
-        # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+        input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
     for alpha in alphas:
@@ -149,20 +150,12 @@ for idx,file in names.iteritems():
             'rho': conn.spectral_radius}
         
         # TRAINING
-
-        rs = np.zeros((n_trials, n_output_nodes))
-        # output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_set)
+        rs = np.zeros((n_trials, conn.n_nodes)) # n_output_nodes))
 
         for trial in range(n_trials):
 
-            # we select a random set of input nodes
-            if random_input: input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
-            
-            # for spatial classification, select input nodes according to sequence
-            if task_name == "spatial_classification_v0" and fixed_input:
-                input_nodes = input_patterns[y[trial]]
-                
-            # output_nodes = conn.get_nodes('all', nodes_without=input_nodes)
+            # select input nodes according to sequence
+            input_nodes = input_patterns[y[trial]]
 
             # create input connectivity matrix
             w_in = np.zeros((n_features, conn.n_nodes))
@@ -176,9 +169,12 @@ for idx,file in names.iteritems():
                                                 input_nodes=input_nodes,
                                                 output_nodes=output_nodes
                                                 )
-
-            # simulate reservoir states; select only output nodes.
-            rs_trial = ESN.simulate(ext_input=x)
+            
+            
+            ic = ESN.set_initial_condition(**kwargs)
+            
+            # simulate reservoir states; returns states of all reservoir nodes
+            rs_trial = ESN.simulate(ext_input=x, ic=ic, noise=True, **kwargs) # returns activity of all nodes
 
             rs_trial = ESN.add_washout_time(
                 rs_trial, idx_washout=idx_washout)[0] # return first item in tuple
@@ -190,6 +186,7 @@ for idx,file in names.iteritems():
             # title=f"{file}_reservoir_activity_trial_{trial}", savefig=True)
 
         # TESTING
+        rs = rs[:,output_nodes] # activity of just output nodes
         rs_train, rs_test = iodata.split_dataset(rs, frac_train=frac_train)
 
         scores = {m:[] for m in metrics}
@@ -197,6 +194,7 @@ for idx,file in names.iteritems():
                                         target=(y_train, y_test),
                                         model=model,
                                         metric=metrics)
+        
         # join alpha dictionary and df_alpha
         for m in metrics: alpha_dict[m] = df_alpha.at[0, m]
         df_sample_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() # | network_data.iloc[idx].to_dict()
@@ -208,12 +206,12 @@ for idx,file in names.iteritems():
             plotting.plot_time_series(y_test, feature_set='data', xlim=[0,n_testing_trials*n_patterns], figsize=figsize, subplot=(1,1,1), legend_label='Target output', num=fig_num)
             plotting.plot_time_series(rs_test, feature_set='pred', xlim=[0,n_testing_trials*n_patterns], xticks=range(0,n_testing_trials*n_patterns), model=modelout,
             figsize=figsize, subplot=(1,1,1), legend_label='Predicted output', block=False, num=fig_num,
-                                        savefig=True, title=f'{file}_{alpha}_performance')
+                                            savefig=True, title=f'{file}_{alpha}_performance')
             fig_num += 1
 
 df_sample = pd.DataFrame(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{n_trials}_trials_{n_output_nodes}_output_nodes.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{n_trials}_trials_noise_no_input.csv')
 print("Dataframe saved.")
 
 #%% Import dataframe
@@ -230,11 +228,10 @@ if plot_perf_curves:
     # plot performance over trials for each sample at each alpha value
     for m in metrics:
 
-        plotting.plot_perf_reg(df_sample, x='alpha', y=m, ylim=[0,1], hue="genotype", hue_order=["WT", "HE", "KO"], # xlim=[min(alphas),max(alphas)]
+        plotting.plot_performance_curve(df_sample, ylim=[0,1], hue="genotype", hue_order=["WT", "HE", "KO"], xlim=[min(alphas),max(alphas)],
         figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}', **kwargs)
 
         # plot boxplots deparated by age and genotype for performance of unscaled networks
-        
            
         # # plot genotype comparisons for dynamical regimes
         # plotting.boxplot(x='regime', y=m, df=df_subj, hue='genotype', hue_order=["WT", "HE", "KO"],

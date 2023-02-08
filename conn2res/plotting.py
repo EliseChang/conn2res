@@ -114,7 +114,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
 
 
 def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', hue=None, hue_order=None, palette=None, ylim=None,
-                           norm=False, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
+                           norm=False, norm_method=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
     fig = plt.figure(figsize=figsize)
@@ -130,9 +130,25 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                 hue_order = ["WT", "HE", "KO"]
 
     if norm:
-        df[y] = df[y] / max(df[y])
+
+        if norm_method == "total_spikes":
+            df['normalised_score'] = df[y] / df["numNspikes"]
+        elif norm_method == "channel_avg_spikes":
+            df['normalised_score'] = df[y] / df["channelavgnumspikes"]
+
+        max_score = max(df['normalised_score'])
+        min_score = min(df['normalised_score'])
+        df['normalised_score'] = (df['normalised_score'] - min_score) / (max_score - min_score)
+
+        ax = fig.add_subplot()
+        plot = sns.lineplot(data=df, x=x, y='normalised_score',
+                        hue=hue,
+                        hue_order=hue_order,
+                        palette=palette,
+                        marker='o',
+                        ax=ax)
     
-    if by_age:
+    elif by_age:
         
         ages = kwargs.get('ages')
         age_point = 1
@@ -162,13 +178,14 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', h
                         palette=palette,
                         markers=True,
                         ax=ax)
+    
     if ylim is not None:
         plt.ylim(ylim)
     sns.despine(offset=10, trim=True)
 
     plt.legend(title=hue, loc='upper right')
     fig.suptitle(title, fontsize=20)
-
+    
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)

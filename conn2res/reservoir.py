@@ -336,7 +336,7 @@ class Reservoir:
         self.w_ih = w_ih
         self.w_hh = w_hh
         self._state = None
-        self.input_size, self.hidden_size = w_ih.shape
+        self.input_size, self.hidden_size, self.timesteps = w_ih.shape
 
 
 class EchoStateNetwork(Reservoir):
@@ -471,7 +471,7 @@ class EchoStateNetwork(Reservoir):
             # if (t>0) and (t%100 == 0): print(f'\t ----- timestep = {t}')
             if noise:
                 synap_input = np.dot(
-                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih) + beta[:,t-1]
+                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih[:,:,t-1]) + beta[:,t-1]
             else:
                 synap_input = np.dot(
                 self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih)

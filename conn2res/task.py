@@ -171,11 +171,6 @@ def classification(x, y, model=None, metric=['score'], **kwargs):
     Binary classification tasks
     # TODO
     """
-
-    if metric != 'score':
-        raise NotImplementedError(
-            'This metric is not yet implemented to evaluate the current model.')
-
     # pop variables from kwargs
     sample_weight_train, sample_weight_test = kwargs.pop(
         'sample_weight', (None, None))

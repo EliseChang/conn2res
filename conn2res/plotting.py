@@ -113,7 +113,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     # plt.close()
 
 
-def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None,
+def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None, chance_perf=0.5,
                            xlim=None, legend=True,ticks=None, markers=False,norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
@@ -169,7 +169,11 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', y
                         hue_order=hue_order,
                         palette=palette,
                         ax=ax)
+    
+    if chance_perf is not None:
+        plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
 
+    plot.axvline(1.0,color='g',linestyle='--',linewidth='2.0')
     if ylim is not None: plt.ylim(ylim)
     plt.legend(title=hue, loc='upper right')
 
@@ -190,10 +194,10 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', y
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='score', xlim=None, ticks=None, ylim=None, hue='genotype', hue_order=["WT", "HE", "KO"],
-    figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
+def plot_perf_reg(df, x, by_regime=False, title=None, y='score', xlim=None, ticks=None, ylim=None, hue='genotype', hue_order=["WT", "HE", "KO"],
+    chance_perf=0.5,figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
 
-    plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
 
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
@@ -201,27 +205,59 @@ def plot_perf_reg(df, x, title=None, y='score', xlim=None, ticks=None, ylim=None
 
         if hue_order and "WT" in list(np.unique(df[hue])):
                 hue_order = ["WT", "HE", "KO"]
-    
-    g = sns.scatterplot(data=df,
+    if by_regime:
+        regimes = kwargs.get('regimes')
+        genotypes = kwargs.get('genotypes')
+        regime_n = 1
+        plot_legend = False
+        for regime in regimes:
+            ax = plt.subplot(1, 3, regime_n)
+            regime_data = df[df['regime'] == regime].groupby('name').mean()
+            regime_data['genotype'] = genotypes
+            g = sns.scatterplot(data=regime_data,
+                x=x,
+                y=y,
+                markers=True,
+                legend=plot_legend,
+                hue=hue,
+                hue_order=hue_order,
+                palette=palette,
+                s=100, ax=ax)
+            if plot_legend:
+                sns.move_legend(ax, loc='upper right')#, bbox_to_anchor=(2.5, 0.5))
+                plot_legend = False # plot legend only once
+            g.set_title(regime, loc='center')
+            regime_n += 1
+
+    else:
+        g = sns.scatterplot(data=df,
                 x=x,
                 y=y,
                 markers=True,
                 legend=True,
                 hue=hue,
                 hue_order=hue_order,
-                palette=palette)
+                palette=palette,
+                s=100)
                 #,ci=None)
 
-    fig = g.get_figure()
+        if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
+        plt.ylim(ylim)
+        plt.yticks(fontsize=20)
+        if ticks is not None: plt.xticks(ticks, fontsize=20)
+        else: plt.xticks(fontsize=20)
+        plt.xlabel(x,fontsize=24)
+        plt.ylabel(y,fontsize=24)
+
+        if chance_perf is not None and y=='score':
+            g.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+        if x=='rho': g.axvline(1.0,color='g',linestyle='--',linewidth='2.0')
+
+        fig = g.get_figure()
     sns.despine()
 
-    if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
-    plt.ylim(ylim)
-    plt.yticks(fontsize=20)
-    if ticks is not None: plt.xticks(ticks, fontsize=20)
-    else: plt.xticks(fontsize=20)
-    plt.xlabel(x,fontsize=24)
-    plt.ylabel(y,fontsize=24)
+    if y=='percentage_change': g.axhline(0,color='r',linestyle='--',linewidth='2.0')
+
     # g.suptitle(title, fontsize=24)
 
     if savefig:
@@ -299,7 +335,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     # plt.close()
 
 def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=None,
-                            cmap='viridis', cbar_norm='norm', cbar_pad=0.02,
+                            cmap='viridis', cbar_norm='norm', cmap_lim=None,cbar_pad=0.02,
                             num=1, figsize=(19.2, 9.43), subplot=None, title=None,
                             savefig=False, block=True, **kwargs):
 
@@ -316,29 +352,34 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
     # plot data
     if x.size > 0:
         plt.imshow(x.T, aspect='auto')
-
-        # set xtick/ythick fontsize
+        # set xtick/ytick fontsize
         ax.tick_params(axis='both', labelsize=22)
 
         # set tight layout in case there are different subplots
         plt.tight_layout()
 
         # add colorbar
-        vmin = x[x != 0].min()
-        vmax = x.max()
+        if cmap_lim is None:
+            vmin = x[x != 0].min()
+            vmax = x.max()
+        else:
+            vmin = cmap_lim[0]
+            vmax = cmap_lim[1]
         if cbar_norm == 'lognorm' and vmax/vmin > 10:
             # use log scale if data spread more than 1 magnitude
             pcm = ax.pcolormesh(x.T, norm=colors.LogNorm(
                 vmin=vmin, vmax=vmax), cmap=getattr(plt.cm, cmap))
         else:
             # use linear scale by default
-            pcm = ax.pcolormesh(x.T, cmap=getattr(plt.cm, cmap))
-        divider = make_axes_locatable(ax)
-        cbar_width = 1 - x.shape[0]/xlim[-1] - cbar_pad
-        cax = divider.append_axes(
-            "right", f'{cbar_width*100:.2f}%', pad=f'{cbar_pad*100:.2f}%')
+            pcm = ax.pcolormesh(x.T, cmap=getattr(plt.cm, cmap),
+                                vmin=vmin, vmax=vmax)
 
-        plt.colorbar(pcm, cax=cax)
+        # divider = make_axes_locatable(ax)
+        # cbar_width = 1 - x.shape[0]/xlim[-1] - cbar_pad
+        # cax = divider.append_axes(
+        #     "right", f'{cbar_width*100:.2f}%', pad=f'{cbar_pad*100:.2f}%')
+
+        plt.colorbar(pcm) # cax=cax
 
     # add title
     if title is not None:
@@ -349,18 +390,42 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
                     transparent=True, bbox_inches='tight', dpi=300)
     # plt.show(block=block)
 
-def boxplot(x, y, df, ylabel="R squared", yticks=None, xticks=None, title=None, hue=None, hue_order=None, palette=None, orient='v', \
-            width=0.5, linewidth=1, xlim=None, ylim=None,\
+def boxplot(x, y, df, ylabel="R squared", by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None, title=None, hue=None, hue_order=None, palette=None, orient='v', \
+            width=0.5, linewidth=1, xlim=None, ylim=None,
             legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
 
     fig = plt.figure(figsize=figsize)
-    ax = plt.subplot()
 
     if palette is None and hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-    plot = sns.boxplot(x=x, y=y,
+    if by_age:     
+        age_point = 1
+        # plot_legend = True
+        for DIV in ages:
+            ax = plt.subplot(2, 3, age_point)
+            # ax = plt.subplot(2, 2, age_point)
+            age_data = df[df['age'] == float(DIV)]
+            plot = sns.boxplot(x=x, y=y,
+                        data=age_data,
+                        palette=palette,
+                        hue=hue,
+                        hue_order=hue_order,
+                        width=width,
+                        linewidth=linewidth,
+                        ax=ax,
+                        **kwargs
+                        )
+            plot.set_title(f'DIV{DIV}', loc='left')
+            # if plot_legend:
+            #     sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
+            #     plot_legend = False # plot legend only once
+            plot.legend_.remove()
+            age_point += 1
+    else:
+        ax = plt.subplot()
+        plot = sns.boxplot(x=x, y=y,
                         data=df,
                         palette=palette,
                         hue=hue,
@@ -371,14 +436,11 @@ def boxplot(x, y, df, ylabel="R squared", yticks=None, xticks=None, title=None, 
                         ax=ax,
                         **kwargs
                         )
-
+        if legend: ax.legend(fontsize=24, frameon=True, ncol=1, loc='best')
+        if title is not None: ax.set_title(title, fontsize=24)
     #  for patch in axis.artists:
     #      r, g, b, a = patch.get_facecolor()
     #      patch.set_facecolor((r, g, b, 0.9))
-
-    if legend: ax.legend(fontsize=24, frameon=True, ncol=1, loc='best')
-
-    if title is not None: ax.set_title(title, fontsize=24)
     
     if ylim is not None: plt.ylim(ylim)
     if xlim is not None: plt.xlim(xlim)
@@ -391,6 +453,8 @@ def boxplot(x, y, df, ylabel="R squared", yticks=None, xticks=None, title=None, 
     if yticks is not None: plt.yticks(yticks, fontsize=20)
     else: plt.yticks(fontsize=20)
 
+    if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
+
     sns.despine()
 
     # set tight layout in case there are different subplots
@@ -401,7 +465,7 @@ def boxplot(x, y, df, ylabel="R squared", yticks=None, xticks=None, title=None, 
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
 
-def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=1, model=None, **kwargs):
+def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=None, model=None, **kwargs):
 
     if feature_set == 'pc':
         # transform data into principal components

@@ -91,7 +91,6 @@ def load_file(file_name, data_dir, file_type=None):
     else:
         raise TypeError("Unsupported file type. Import .npy or .csv file.")
 
-
 def get_available_tasks():
     return NEUROGYM_TASKS + NATIVE_TASKS + RESERVOIRPY_TASKS + STIMULATION_CLASSIFICATION_TASKS
 
@@ -274,9 +273,15 @@ def random_pattern_sequence(n_patterns, n_trials):
     sequence = np.array([order[i] for i in rand_order])
     return sequence
 
-def create_classification_dataset(task, n_timesteps, ITI, **kwargs):
+def create_classification_dataset(task, n_timesteps, ITI, input_shape, washout, input_sf,**kwargs):
     if task == "spatial_classification_v0":
-        x = np.concatenate([np.ones(n_timesteps),np.zeros(ITI)])[:,np.newaxis]
+        # TODO: ensure even number of timesteps for biphasic signal
+        if input_shape == "biphasic":
+            background = np.random.randint(2, size=washout)
+            input = np.concatenate((np.ones(int(n_timesteps/2)),-np.ones(int(n_timesteps/2)),
+                                    np.zeros(ITI))) * input_sf
+            x = np.concatenate((background,input))[:,np.newaxis]
+            
         # y = np.array([np.repeat(trial,n_timesteps)[:,np.newaxis] for trial in sequence])
     # elif task == "temporal_classification_v0":
 

@@ -25,7 +25,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Metaparameters
 import_dataframe = 1
-dataframe_name = 'spatial_classification_v0_MEA-Mecp2_2022_dataset_conn2res_2023-02-16_randomised.csv'  # name of previously generated .csv dataframe
+dataframe_name = 'spatial_classification_v0_MEA-Mecp2_2022_dataset_conn2res_2023-02-15_unscaled.csv'  # name of previously generated .csv dataframe
 plot_diagnostics = 0
 plot_perf_curves = 1
 
@@ -249,7 +249,8 @@ if import_dataframe:
 
 if plot_perf_curves:
     regimes = ['stable','critical','chaotic']
-    genotypes = genotypes.to_list()
+    if not isinstance(genotypes, list):
+        genotypes = genotypes.to_list()
     figsize = (19.2, 9.43)
     kwargs = {'ages': np.sort(ages.unique()),
               'regimes': regimes,
@@ -261,19 +262,21 @@ if plot_perf_curves:
         #                                 hue="genotype", hue_order=["WT", "HE", "KO"],
         #                                 figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_input_sf_{input_sf}_performance_{m}', **kwargs)
 
-        # # plotting performance for unscaled networks
-        # plotting.plot_perf_reg(df_sample, x='rho',ylim=[0,1], ticks=[0,1,10,20,30,40],
-        #                     hue="genotype", hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
+        # plotting performance for unscaled networks
+        plotting.plot_perf_reg(df_sample, x='rho',xlim=[0,45],ticks=[0,1,10,20,30,40],
+                            hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
+        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
 
-        # Percentage change in performance boxplots for rewired networks
-        # df_sample['percentage_change'] = (df_sample[m] - df_sample['original_score']) / df_sample['original_score']
-       
-        plotting.boxplot(x='alpha', y='percentage_change', ylabel='Percentage score change upon randomisation', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
-             ylim=[-100,200], figsize=figsize, savefig=True, title='rewired_fully_connected_performance_change_boxplots')
+        # plotting.boxplot(df=df_sample, x='genotype', y=m, ylim=[0,1],chance_perf=0.5, order=["WT", "HE", "KO"],
+        #                  figsize=(19.2/2, 9.43), width=0.2, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+
+        # # Percentage change in performance boxplots for rewired networks
+        # # df_sample['percentage_change'] = (df_sample[m] - df_sample['original_score']) / df_sample['original_score']
+        # plotting.boxplot(x='alpha', y='percentage_change', ylabel='Percentage score change upon randomisation', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
+        #      ylim=[-100,200], figsize=figsize, savefig=True, title='rewired_fully_connected_performance_change_boxplots')
 
         # # plot rho distribution
-        # plotting.boxplot(x='age', y='rho', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
+        # plotting.boxplot(x='age', y='rho', ylabel='rho', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
         #     figsize=figsize, savefig=True, title=f'{dataset}_fully_connected_rho_age_genotype_distribution_boxplots')
 
         # # plot performance curve at each developmental age
@@ -302,13 +305,13 @@ if plot_perf_curves:
         # title=f'{task_name}_{dataset}_performance_across_development_{m}',
         # **kwargs)
 
-        # # linear regression model for performance as a function of network and electrophysiological variables
-        # network_vars = ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+        # # # linear regression model for performance as a function of network and electrophysiological variables
+        # network_vars = ["density_full"] #, "net_size", "n_mod","small_world_sigma","small_world_omega"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        # ephys_vars = ['NBurstRate'] #, 'meanspikes', 'FRmean','meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+        # var_names = ["Density", "Network burst rate (Hz)"]
 
-        # for v in network_vars + ephys_vars:
-        #     plotting.plot_perf_reg(df_sample, x=v, by_regime=True,
-        #         y=m,hue='genotype',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}',
-        #         **kwargs)
+        # for (v, var_name) in zip(network_vars + ephys_vars, var_names):
+        #     plotting.plot_perf_reg(df_sample, x=v,y=m,xlabel=var_name,hue='genotype',
+        #     size='age',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}',**kwargs)
 
 # %%

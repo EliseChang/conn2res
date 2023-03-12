@@ -84,6 +84,13 @@ class PCA:
         return self.transform(data, **kwargs)
 
 
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+    new_cmap = colors.LinearSegmentedColormap.from_list(
+        'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+        cmap(np.linspace(minval, maxval, n)))
+    return new_cmap
+
+
 def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, block=True):
 
     fig = plt.figure(num=num, figsize=figsize)
@@ -112,8 +119,8 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     # plt.close()
 
 
-def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None, chance_perf=0.5,
-                           xlim=None, legend=True,ticks=None, markers=False,norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
+def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None, chance_perf=0.5,
+                           xlim=None, legend=True,ticks=None, norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
     fig = plt.figure(figsize=figsize)
@@ -131,57 +138,29 @@ def plot_performance_curve(df, by_age=False, title=None, x='alpha', y='score', y
         max_score = max(df[y])
         min_score = min(df[y])
         df[y] = (df[y] - min_score) / (max_score - min_score)
-    
-    if by_age:     
-        ages = kwargs.get('ages')
-        age_point = 1
-        plot_legend = True
-        for DIV in ages:
-            ax = plt.subplot(2, 3, age_point)
-            # ax = plt.subplot(2, 2, age_point)
-            age_data = df[df['age'] == DIV]
-            plot = sns.lineplot(data=age_data, x=x, y=y,
-                        hue=hue,
-                        hue_order=hue_order,
-                        palette=palette,
-                        markers=True,
-                        legend=plot_legend,
-                        ax=ax)
-            plot.set_title(f'DIV{DIV}', loc='left')
-            if plot_legend:
-                sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
-                plot_legend = False # plot legend only once
-            age_point += 1
 
-    else:
-        ax = fig.add_subplot()
-        plot = sns.lineplot(data=df, x=x, y=y,
-                        hue=hue,
-                        hue_order=hue_order,
-                        palette=palette,
-                        markers=True,
-                        legend=legend,
-                        ax=ax)
-    if markers:
-        plot = sns.scatterplot(data=df, x=x, y=y,
-                        hue=hue,
-                        hue_order=hue_order,
-                        palette=palette,
-                        ax=ax)
+    ax = fig.add_subplot()
+    plot = sns.lineplot(data=df, x=x, y=y,
+                    hue=hue,
+                    hue_order=hue_order,
+                    palette=palette,
+                    markers=True,
+                    legend=legend,
+                    ax=ax)
 
     if ylim is not None: plt.ylim(ylim)
     if xlim is not None: plt.xlim(xlim)
 
-    if not by_age:
-        if chance_perf is not None:
-            plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-        plot.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
-        plt.legend(title=hue, loc='best', fontsize=22, frameon=False)
-        plt.xlabel(x, fontsize=30)
-        plt.ylabel(ylabel, fontsize=30)
-        if ticks is not None: plt.xticks(ticks, fontsize=24)
-        else: plt.xticks(fontsize=26)
-        plt.yticks(fontsize=26)
+    if chance_perf is not None:
+        plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+    plot.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
+    l = plt.legend(title=hue, loc='best', fontsize=22, frameon=False)
+    plt.setp(l.get_title(), fontsize='22')
+    plt.xlabel(x, fontsize=30)
+    plt.ylabel(ylabel, fontsize=30)
+    if ticks is not None: plt.xticks(ticks, fontsize=24)
+    else: plt.xticks(fontsize=26)
+    plt.yticks(fontsize=26)
 
     sns.despine()
 
@@ -245,6 +224,36 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, t
     if x=='rho': g.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
 
     fig = g.get_figure()
+    # plt.title(title, fontsize=28)
+
+    sns.despine()
+
+    if savefig:
+        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+                    transparent=True, bbox_inches='tight', dpi=300)
+    if show: plt.show(block=block)
+
+def plot_line_plot(df, x, title=None, y='score', ylabel='R squared', xlim=None, ticks=None, ylim=None, xlabel=None,
+                  hue='genotype', hue_order=["WT", "HE", "KO"], chance_perf=0.5,
+                  figsize=(19.2, 9.43),savefig=False, show=False, block=True):
+
+    fig = plt.figure(figsize=figsize)
+    p = sns.lineplot(df, x=x, y=y, hue=hue, hue_order=hue_order)
+
+    if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
+    plt.ylim(ylim)
+    plt.yticks(fontsize=26)
+    if ticks is not None: plt.xticks(ticks, fontsize=26)
+    else: plt.xticks(fontsize=26)
+    if xlabel is not None: plt.xlabel(xlabel,fontsize=30)
+    else: plt.xlabel(x,fontsize=30)
+    plt.ylabel(ylabel,fontsize=30)
+
+    if chance_perf is not None and y=='score':
+        p.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+
+    fig = p.get_figure()
+    # plt.title(title, fontsize=28)
 
     sns.despine()
 
@@ -401,7 +410,6 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
         plot_legend = True
         for DIV in ages:
             ax = plt.subplot(2, 3, age_point)
-            # ax = plt.subplot(2, 2, age_point)
             age_data = df[df['age'] == float(DIV)]
             plot = sns.boxplot(x=x, y=y,
                         data=age_data,
@@ -413,14 +421,31 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
                         ax=ax,
                         **kwargs
                         )
-            plot.set_title(f'DIV{DIV}', loc='left')
+            plot.set_title(f'DIV{DIV}', loc='left', fontsize=28)
             if plot_legend:
                 sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
                 plot_legend = False # plot legend only once
             plot.legend_.remove()
+
+            if ylim is not None: plt.ylim(ylim)
+            if xlim is not None: plt.xlim(xlim)
+
+            plt.xlabel(x, fontsize=28)
+            plt.ylabel(ylabel, fontsize=28)
+
+            if xticks is not None: plt.xticks(xticks, fontsize=24)
+            else: plt.xticks(fontsize=24)
+            if yticks is not None: plt.yticks(yticks, fontsize=24)
+            else: plt.yticks(fontsize=24)
+
+            if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
+            if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+            sns.despine()
+
             age_point += 1
+
     else:
-        ax = plt.subplot()
+        ax = plt.subplot(1, 1, 1)
         plot = sns.boxplot(x=x, y=y,
                         data=df,
                         order=order,
@@ -434,24 +459,22 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
                         **kwargs
                         )
         if legend: ax.legend(fontsize=22, title=hue, frameon=False, ncol=1, loc='best')
-    #  for patch in axis.artists:
-    #      r, g, b, a = patch.get_facecolor()
-    #      patch.set_facecolor((r, g, b, 0.9))
-    
-    if ylim is not None: plt.ylim(ylim)
-    if xlim is not None: plt.xlim(xlim)
+        else: plot.legend_.remove()
 
-    plt.xlabel(x, fontsize=28)
-    plt.ylabel(ylabel, fontsize=28)
+        if ylim is not None: plt.ylim(ylim)
+        if xlim is not None: plt.xlim(xlim)
 
-    if xticks is not None: plt.xticks(xticks, fontsize=24)
-    else: plt.xticks(fontsize=24)
-    if yticks is not None: plt.yticks(yticks, fontsize=24)
-    else: plt.yticks(fontsize=24)
+        plt.xlabel(x, fontsize=28)
+        plt.ylabel(ylabel, fontsize=28)
 
-    if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
-    if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-    sns.despine()
+        if xticks is not None: plt.xticks(xticks, fontsize=24)
+        else: plt.xticks(fontsize=24)
+        if yticks is not None: plt.yticks(yticks, fontsize=24)
+        else: plt.yticks(fontsize=24)
+
+        if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
+        if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+        sns.despine()
 
     # set tight layout in case there are different subplots
     plt.tight_layout()
@@ -459,6 +482,85 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
+    if show: plt.show(block=block)
+
+def parallel_plot(df, y1_var, y2_var, c, hue='genotype', hue_order=['WT','HE','KO'], cmap='viridis', xlabels=None, ylabel=None, ylim=None, chance_perf=None,
+                  cb_norm=None, cb_ticks=None, cb_label=None, figsize=(19.2, 9.43), show=False, savefig=False, block=True, title=None, **kwargs):
+    
+    ncols = len(df[hue].unique())
+    fig, axs = plt.subplots(nrows=1, ncols=ncols, figsize=figsize)
+
+    for subplot_n in range(0, ncols):
+        plt.subplot(1, ncols, subplot_n+1)
+        data = df[df[hue] == hue_order[subplot_n]].reset_index()
+        x1_data = np.ones(len(data[y1_var])) * 0.25 + np.random.uniform(-0.1,0.1, size=len(data[y1_var])) # add jitter
+        x2_data = np.ones(len(data[y2_var])) * 0.75 + np.random.uniform(-0.1,0.1, size=len(data[y2_var]))
+        ax = axs[subplot_n]
+
+        for y1, y2, x1, x2 in zip(data[y1_var], data[y2_var], x1_data, x2_data):
+            ax.plot([x1, x2], [y1, y2], color='black')
+
+        if cb_norm=='log':
+            c_data = np.log10(data[c])
+            # norm=colors.SymLogNorm(linthresh=0.01, base=10)
+        else: norm=None
+
+        s = plt.scatter(x1_data, data[y1_var], s=120, c=c_data, cmap=cmap)
+        plt.scatter(x2_data, data[y2_var], s=120, c=c_data, cmap=cmap)
+        
+        ax.set_xticks([0.25, 0.75], labels=xlabels, fontsize=18)
+        ax.set_title(hue_order[subplot_n], loc='center', fontsize=18)
+
+        if chance_perf is not None:
+            s.axhline(chance_perf,color='gray',linestyle='--',linewidth='2.0')
+
+        plt.xlim([0,1])
+        if ylim is not None: plt.ylim(ylim)
+        if ylabel is not None: plt.ylabel(ylabel, fontsize=18)
+        plt.yticks(fontsize=18)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+    # # add colorbar
+    # if cb_lim is None:
+    #     vmin = df[c][df[c] != 0].min()
+    #     vmax = df[c].max()
+    # else:
+    #     vmin = cb_lim[0]
+    #     vmax = cb_lim[1]
+
+    # if cb_norm == 'log' and vmax/vmin > 10:
+    #     # use log scale if data spread more than 1 magnitude
+    #     pcm = ax.pcolormesh(df[c], norm=colors.Log(
+    #         vmin=vmin, vmax=vmax), cmap=getattr(plt.cm, cmap))
+    # else:
+    #     # use linear scale by default
+        # pcm = ax.pcolormesh(df[c][:,np.newaxis], cmap=cmap)
+    
+    # get one new axis
+    for ax in axs:
+        divider = make_axes_locatable(ax)
+        divider.new_vertical(size='5%', pad=0.6, pack_start = True)
+
+    cax = fig.add_axes([0.05, 0, 0.95, 0.05])
+    # pcm = plt.pcolormesh(data[c][:,np.newaxis], norm=norm, cmap=cmap)
+    cb = fig.colorbar(s, ax=axs, cax=cax, orientation='horizontal')
+    if cb_ticks is not None:
+        cb.ax.set_xticks(cb_ticks)
+        cb.ax.set_xticklabels(cb_ticks, fontsize=18)
+    else:
+        cb.ax.tick_params(labelsize=18)
+    if cb_label is not None:
+        cb.ax.set_xlabel(cb_label, fontsize=18)
+    else: cb.ax.set_xlabel(c, fontsize=18)
+    
+    # set tight layout in case there are different subplots
+    plt.tight_layout()
+
+    if savefig:
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+                    transparent=False, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
 
 def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=None, model=None, **kwargs):

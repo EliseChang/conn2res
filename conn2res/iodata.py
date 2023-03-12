@@ -288,7 +288,7 @@ def create_classification_dataset(task, n_timesteps, ITI, input_shape, washout, 
     return x
 
 
-def split_dataset(*args, frac_train=0.7, axis=0, n_train=None):
+def split_dataset(*args, frac_train, axis=0, n_train=None):
     """
     Splits data into training and test sets according to
     'frac_train'

@@ -412,8 +412,9 @@ class EchoStateNetwork(Reservoir):
         # if not provided we feed into and read out from all nodes
         self.input_nodes = kwargs.get(
             'input_nodes', np.arange(self.hidden_size))
-        self.output_nodes = kwargs.get(
-            'output_nodes', np.arange(self.hidden_size))
+        
+        # self.output_nodes = kwargs.get(
+        #     'output_nodes', np.arange(self.hidden_size))
 
         # scale the input weights
         self.input_gain = input_gain

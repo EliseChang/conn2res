@@ -24,17 +24,17 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # %% Set global variables
 
 # Metaparameters
-import_dataframe = 1
-dataframe_name = 'spatial_classification_v0_MEA-Mecp2_2022_dataset_conn2res_2023-02-15_unscaled.csv'  # name of previously generated .csv dataframe
+import_dataframe = 0
+dataframe_name = ''  # name of previously generated .csv dataframe
 plot_diagnostics = 0
 plot_perf_curves = 1
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dataset = "MEA-Mecp2_2022_dataset_conn2res"
-CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity', 'nulls_comparisons','2022_connected_randomised_randmio_1000')
-NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
-EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
+CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity')
+# NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
+# EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
 METADATA = f"{dataset}.xlsx"
 
 # Today's date for saving objects
@@ -79,30 +79,29 @@ elif task_name == 'temporal_classification_v0':
     kwargs = {}
 
 # Input node selection
-input_patterns = np.array([[21], [10]])
+input_patterns = np.array([[19], [9]])
 input_set = np.concatenate(input_patterns)
 # total number of nodes used for input across all patterns -- do not select any of these for output
 n_input_nodes = len(input_set)
 
-output_nodes = np.array([40, 42, 45, 49, 51])  # last column
-n_output_nodes = len(output_nodes)
+n_output_nodes = 6 # number of nodes in each set defined below
 
 n_trials = n_patterns*n_pres
 n_training_trials = round(n_pres*frac_train)  # for each pattern
 n_testing_trials = round(n_pres*(1-frac_train))  # for each pattern
 
 # Metrics to evaluate the regression model for RC output
-metrics = ['score']
-alphas = np.concatenate((np.linspace(0.2, 1.2, num=6), np.arange(
-    2.0, 7.0, 1.0)))  # np.linspace(0.2, 3.0, num=15)
+alphas = np.linspace(0.8, 1.2, num=5)
+# np.concatenate((np.linspace(0.2, 1.2, num=6), np.arange(
+#     2.0, 7.0, 1.0)))  # np.linspace(0.2, 3.0, num=15)
 
 fig_num = 1
 
 # %% Main
 
 df_sample_ls = []  # initialise list to contain dictionaries for each alpha trial
-ephys_data = pd.read_csv(EPHYS_DATA)
-network_data = pd.read_csv(NET_DATA)
+# ephys_data = pd.read_csv(EPHYS_DATA)
+# network_data = pd.read_csv(NET_DATA)
 
 # generate and fetch data
 x = iodata.fetch_dataset(task_name, **kwargs)
@@ -152,20 +151,19 @@ for idx, file in names.items():
         print(
             f'\n----------------------- alpha = {alpha} -----------------------')
 
-        alpha_dict = {
-            'name': file,
-            'age': ages[idx],
-            'genotype': genotypes[idx],
-            'sample id': sample_id,
-            # 'original_score': orig_scores[idx],
-            'alpha': np.round(alpha, 3),
-            'regime': regime,
-            'rho': conn.spectral_radius}
-        # 'edge weights': np.triu(conn.w * alpha)}
-
-        # TRAINING
+        # alpha_dict = {
+        #     'name': file,
+        #     'age': ages[idx],
+        #     'genotype': genotypes[idx],
+        #     'sample id': sample_id,
+        #     # 'original_score': orig_scores[idx],
+        #     'alpha': np.round(alpha, 3),
+        #     # 'regime': regime,
+        #     'rho': conn.spectral_radius}
+        
         rs = np.zeros((n_trials, conn.n_nodes))  # n_output_nodes))
 
+        # TRAINING
         for trial in range(n_trials):
 
             # select stimulation pattern input nodes according to sequence
@@ -187,9 +185,7 @@ for idx, file in names.items():
                                             w_hh=conn.w * alpha,
                                             activation_function='tanh',
                                             #  input_gain=10.0,
-                                            input_nodes=input_nodes,
-                                            output_nodes=output_nodes
-                                            )
+                                            input_nodes=input_nodes)
 
             ic = ESN.set_initial_condition(**kwargs)
 
@@ -201,28 +197,55 @@ for idx, file in names.items():
             rs_trial = ESN.add_washout_time(
                 rs_trial, idx_washout=idx_washout)[0]  # return first item in tuple
 
-            rs[trial, :] = np.mean(rs_trial, axis=0)
+            rs[trial, :] = np.mean(rs_trial, axis=0)    
 
-            # if trial == 0 or trial == 1:
-            #     # plot reservoir activity TODO: only plot one raster for each pattern
-            #     plotting.plot_time_series_raster(rs_trial, xlim=[0,len(rs_trial)], figsize=(19.2, 9.43),
-            #     cmap_lim=[-1,1],title=f"{file}_reservoir_activity_trial_{trial}", savefig=True)
-
-        # TESTING
-        rs = rs[:, output_nodes]  # activity of just output nodes
-        rs_train, rs_test = iodata.split_dataset(rs, frac_train=frac_train)
-
-        scores = {m: [] for m in metrics}
-        df_alpha, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
-                                            target=(y_train, y_test),
-                                            model=model,
-                                            metric=metrics)
-
-        # join alpha dictionary and df_alpha
-        for m in metrics:
-            alpha_dict[m] = df_alpha.at[0, m]
+        output_sets = np.array([
+            [20, 23, 28, 29, 34, 37],
+            [18, 21, 26, 31, 36, 39],
+            [15, 16, 25, 32, 41, 42],
+            [13, 12, 3, 55, 46, 45],
+            [10, 7, 2, 56, 51, 48],
+            [8, 5, 0, 58, 53, 50],
+            [6, 4, 1, 57, 54, 52]])
         
-        df_sample_ls.append(alpha_dict | ephys_data.iloc[sample_id].to_dict() | network_data.iloc[sample_id].to_dict())
+        # output_sets = np.array([
+        # [20, 18, 15, 13, 10, 8],
+        # [23, 21, 16, 12, 7, 5],
+        # [28, 26, 25, 3, 2, 0],
+        # [29, 31, 32, 55, 56, 58],
+        # [34, 36, 41, 46, 51, 53],
+        # [37, 39, 42, 45, 48, 50],
+        # [38, 40, 43, 44, 47, 49]])
+
+        output_rows = np.arange(2, 9)
+
+        for output_nodes, output_row_n in zip(output_sets, output_rows):
+
+            # TESTING
+            rs_output = rs[:, output_nodes]  # activity of just output nodes
+            rs_train, rs_test = iodata.split_dataset(rs_output, frac_train=frac_train)
+
+            df_alpha, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
+                                                target=(y_train, y_test),
+                                                model=model,
+                                                metric=['score'])
+            
+            alpha_dict = {
+            'name': file,
+            'age': ages[idx],
+            'genotype': genotypes[idx],
+            'sample id': sample_id,
+            # 'original_score': orig_scores[idx],
+            'alpha': np.round(alpha, 3),
+            # 'regime': regime,
+            'rho': conn.spectral_radius,
+            'output_col_n': output_row_n,
+            'score': df_alpha.at[0, 'score']}
+
+            # # join alpha dictionary and df_alpha
+            # alpha_dict[output_col_n] = df_alpha.at[0, 'score']
+        
+            df_sample_ls.append(alpha_dict) # | network_data.iloc[sample_id].to_dict()) | ephys_data.iloc[sample_id].to_dict()
 
         if plot_diagnostics:
 
@@ -237,7 +260,7 @@ for idx, file in names.items():
 
 df_sample = pd.DataFrame(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_randomised.csv')
+    f'{PROJ_DIR}/dataframes/{today}_input-output_distance_comparison_scaled_rows.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe
@@ -252,66 +275,78 @@ if plot_perf_curves:
     if not isinstance(genotypes, list):
         genotypes = genotypes.to_list()
     figsize = (19.2, 9.43)
-    kwargs = {'ages': np.sort(ages.unique()),
-              'regimes': regimes,
-              'genotypes': genotypes}
-    # plot performance over trials for each sample at each alpha value
-    for m in metrics:
+    kwargs = {'ages': [7, 14, 21, 28, 35], # np.sort(ages.unique()),
+            'regimes': regimes,
+            'genotypes': genotypes}
+    
+    m = 'score'
 
-        # plotting.plot_performance_curve(df_sample, y=m, ylim=[0, 1], xlim=[min(alphas), max(alphas)],
-        #                                 hue="genotype", hue_order=["WT", "HE", "KO"],
-        #                                 figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_input_sf_{input_sf}_performance_{m}', **kwargs)
+    # plotting.plot_performance_curve(df_sample, y=m, ylim=[0, 1], xlim=[min(alphas), max(alphas)],
+    #                                 hue="genotype", hue_order=["WT", "HE", "KO"],
+    #                                 figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_output_col_n_{output_col_n}', **kwargs)
 
-        # plotting performance for unscaled networks
-        plotting.plot_perf_reg(df_sample, x='rho',xlim=[0,45],ticks=[0,1,10,20,30,40],
-                            hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
-        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
+    plotting.plot_line_plot(df_sample, x='output_col_n', title="Performance vs input-output distance", y='score', ylabel='R squared', xlim=None, ticks=None, ylim=[0,1], xlabel="Output column number",
+                  hue='genotype', hue_order=["WT", "HE", "KO"], chance_perf=0.5,
+                  figsize=(19.2, 9.43),savefig=True, show=False, block=True)
+    
+    # # plotting performance for unscaled networks
+    # plotting.plot_perf_reg(df_sample, x='rho',ylim=[0,1],xlim=[0,45],ticks=[0,1,10,20,30,40],
+    #                     hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
+    # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
 
-        # plotting.boxplot(df=df_sample, x='genotype', y=m, ylim=[0,1],chance_perf=0.5, order=["WT", "HE", "KO"],
-        #                  figsize=(19.2/2, 9.43), width=0.2, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+    # plotting.boxplot(df=df_sample, x='genotype', y=m, ylim=[0,1],chance_perf=0.5, order=["WT", "HE", "KO"], hue='genotype', hue_order=["WT", "HE", "KO"], legend=False,
+    #                     figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+    
+    # plotting.parallel_plot(df_sample, 'score', 'original_score', c='rho', cb_norm='log',cmap='coolwarm',
+    #     cb_label="log(rho)", xlabels=["Original", "Rescaled to alpha = 1"], ylabel="R squared", savefig=True,
+    #     title='rescaled_fully_connected_performance_change_parallel_plot')
+    
+    # # Percentage change in performance boxplots for rewired networks
+    # df_sample['percentage_change'] = (df_sample[m] - df_sample['original_score']) / df_sample['original_score']
+    # plotting.boxplot(x='alpha', y='percentage_change', ylabel='Percentage score change upon randomisation', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
+    #      width=1.0, ylim=[-100,200], figsize=(4.5, 8), savefig=True, title='rewired_fully_connected_performance_change_boxplots_scaled')
 
-        # # Percentage change in performance boxplots for rewired networks
-        # # df_sample['percentage_change'] = (df_sample[m] - df_sample['original_score']) / df_sample['original_score']
-        # plotting.boxplot(x='alpha', y='percentage_change', ylabel='Percentage score change upon randomisation', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
-        #      ylim=[-100,200], figsize=figsize, savefig=True, title='rewired_fully_connected_performance_change_boxplots')
+    # # plot rho distribution
+    # plotting.boxplot(x='age', y='rho', ylabel='rho', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
+    #     figsize=figsize, savefig=True, title=f'{dataset}_fully_connected_rho_age_genotype_distribution_boxplots')
 
-        # # plot rho distribution
-        # plotting.boxplot(x='age', y='rho', ylabel='rho', df=df_sample, hue='genotype', hue_order=["WT", "HE", "KO"],
-        #     figsize=figsize, savefig=True, title=f'{dataset}_fully_connected_rho_age_genotype_distribution_boxplots')
+    # # plot performance curve at each developmental age
+    # plotting.plot_performance_curve(df_sample, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
+    # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_by_age',
+    # **kwargs)
 
-        # # plot performance curve at each developmental age
-        # plotting.plot_performance_curve(df_sample, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
-        # **kwargs)
+    # plot genotype comparisons for dynamical regimes at each developmental age
+    # re-group
+    # regime_data_ls = []
+    # for regime in regimes:
+    #     regime_data = df_sample[df_sample['regime'] == regime].reset_index().groupby('name').mean()
+    #     regime_data['genotype'] = genotypes
+    #     regime_data['regime'] = regime
 
-        # # plot genotype comparisons for dynamical regimes at each developmental age
-        # # re-group
-        # regime_data_ls = []
-        # for regime in regimes:
-        #     regime_data = df_sample[df_sample['regime'] == regime].reset_index().groupby('name').mean()
-        #     regime_data['genotype'] = genotypes
-        #     regime_data['regime'] = regime
-        #     regime_data_ls.append(regime_data)
-        # df_regrouped = pd.concat(regime_data_ls)
-        # plotting.boxplot(x='regime', y=m, df=df_regrouped, by_age=True, hue='genotype', hue_order=["WT", "HE", "KO"],
-        #     ylim=[0,1], figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_boxplots',**kwargs)
+    #     plotting.plot_perf_reg(regime_data, x='density_full', y=m, xlabel="Density",hue='genotype', figsize=(9.43, 9.43),
+    #     size='age',savefig=True, title=regime,**kwargs)
 
-        # # examine trends at individual alpha values/regimes
-        # alpha_data = df_sample[df_sample['alpha'] == 1.0].reset_index()
+    #     regime_data_ls.append(regime_data)
+    # df_regrouped = pd.concat(regime_data_ls)
+    # plotting.boxplot(x='regime', y=m, df=df_regrouped, by_age=True, hue='genotype', hue_order=["WT", "HE", "KO"],
+    #     ylim=[0,1], figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_by_age_{m}_boxplots',**kwargs)
 
-        # # plot change in performance over development
-        # plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
-        # hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False,
-        # title=f'{task_name}_{dataset}_performance_across_development_{m}',
-        # **kwargs)
+    # # examine trends at individual alpha values/regimes
+    # alpha_data = df_sample[df_sample['alpha'] == 1.0].reset_index()
 
-        # # # linear regression model for performance as a function of network and electrophysiological variables
-        # network_vars = ["density_full"] #, "net_size", "n_mod","small_world_sigma","small_world_omega"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # ephys_vars = ['NBurstRate'] #, 'meanspikes', 'FRmean','meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
-        # var_names = ["Density", "Network burst rate (Hz)"]
+    # # plot change in performance over development
+    # plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
+    # hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False,
+    # title=f'{task_name}_{dataset}_performance_across_development_{m}',
+    # **kwargs)
 
-        # for (v, var_name) in zip(network_vars + ephys_vars, var_names):
-        #     plotting.plot_perf_reg(df_sample, x=v,y=m,xlabel=var_name,hue='genotype',
-        #     size='age',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}',**kwargs)
+    # # linear regression model for performance as a function of network and electrophysiological variables
+    # network_vars = ["density_full"] #, "net_size", "n_mod","small_world_sigma","small_world_omega"] # ["density_full", "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+    # ephys_vars = [] #, 'NBurstRate', 'meanspikes', 'FRmean','meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+    # var_names = ["Density"]
+
+    # for (v, var_name) in zip(network_vars + ephys_vars, var_names):
+    #     plotting.plot_perf_reg(df_sample, x=v,y=m,xlabel=var_name,hue='genotype',
+    #     size='age',savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}_output_row_{output_row_n}_{n_output_nodes}_output_nodes',**kwargs)
 
 # %%

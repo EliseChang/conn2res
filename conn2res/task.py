@@ -205,7 +205,7 @@ def multiClassClassification(x, y, model=None, metric=['score'], **kwargs):
     # TODO
     """
 
-    if metric != 'score':
+    if metric != ['score']:
         raise NotImplementedError(
             'This metric is not yet implemented to evaluate the current model.')
 

@@ -325,7 +325,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
     plt.tight_layout()
 
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
     # plt.close()
@@ -392,9 +392,10 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=True, bbox_inches='tight', dpi=300)
+    plt.close(fig)
     # plt.show(block=block)
 
-def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None,
+def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None, xticklabs=None,
             title=None, hue=None, hue_order=None, palette=None, orient='v', \
             width=0.5, linewidth=1, xlim=None, ylim=None, chance_perf=None,
             legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
@@ -433,8 +434,9 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
             plt.xlabel(x, fontsize=28)
             plt.ylabel(ylabel, fontsize=28)
 
-            if xticks is not None: plt.xticks(xticks, fontsize=24)
+            if xticks is not None: plt.xticks(xticks, fontsize=24,)
             else: plt.xticks(fontsize=24)
+            if xticklabs is not None: plot.set_xticklabels(xticklabs)
             if yticks is not None: plt.yticks(yticks, fontsize=24)
             else: plt.yticks(fontsize=24)
 
@@ -562,6 +564,30 @@ def parallel_plot(df, y1_var, y2_var, c, hue='genotype', hue_order=['WT','HE','K
         plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
                     transparent=False, bbox_inches='tight', dpi=300)
     if show: plt.show(block=block)
+
+def barplot(data, channels, num, subplot=None, figsize=(19.2, 9.43), name=None, savefig=False):
+
+    mean = np.mean(data, axis=0)
+    sd = np.std(data, axis=0)
+    x_pos = np.arange(np.size(data,axis=1))
+
+    plt.figure(num=num, figsize=figsize)
+    if subplot is None:
+        subplot = (1, 1, 1)
+    plt.subplot(*subplot)
+    
+    ax = plt.gca()
+    ax.bar(x_pos, mean, yerr=sd, align='center', alpha=0.5, ecolor='black', capsize=10)
+    ax.set_ylabel('Weight')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(channels)
+    # ax.set_title('')
+    ax.yaxis.grid(False)
+
+    # Save the figure and show
+    if savefig:
+        plt.tight_layout()
+        plt.savefig(fname=os.path.join(FIG_DIR, f'{name}.png'))
 
 def transform_data(data, feature_set, idx_features=None, n_features=None, scaler=None, model=None, **kwargs):
 

@@ -273,14 +273,23 @@ def random_pattern_sequence(n_patterns, n_trials):
     sequence = np.array([order[i] for i in rand_order])
     return sequence
 
-def create_classification_dataset(task, n_timesteps, ITI, input_shape, washout, input_sf,**kwargs):
+def inv_trans_sample(n,dist,quantiles):
+
+    samples = np.random.uniform(min(quantiles),max(quantiles),size=(n,1))
+    bin_idx = np.argmin(np.abs(quantiles[np.newaxis,:]-samples),axis=1)
+    vals = dist[bin_idx]
+    return vals
+
+def create_classification_dataset(task, input_shape, noise, washout, stim_duration, post_stim, input_sf, **kwargs):
     if task == "spatial_classification_v0":
         # TODO: ensure even number of timesteps for biphasic signal
+
         if input_shape == "biphasic":
-            background = np.random.randint(2, size=washout)
-            input = np.concatenate((np.ones(int(n_timesteps/2)),-np.ones(int(n_timesteps/2)),
-                                    np.zeros(ITI))) * input_sf
-            x = np.concatenate((background,input))[:,np.newaxis]
+            stim = np.ones(stim_duration,dtype=int) * input_sf
+            # stim = np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))) * input_sf
+            pre_stim_background = np.ones(washout,dtype=int)
+            post_stim_bacgkround =  np.ones(post_stim,dtype=int)
+            x = np.concatenate((pre_stim_background,stim,post_stim_bacgkround))[:,np.newaxis]
             
         # y = np.array([np.repeat(trial,n_timesteps)[:,np.newaxis] for trial in sequence])
     # elif task == "temporal_classification_v0":

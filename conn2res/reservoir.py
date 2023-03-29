@@ -13,7 +13,7 @@ from numpy.linalg import (pinv, matrix_rank)
 from scipy.linalg import eigh
 from bct.algorithms.clustering import get_components
 from bct.algorithms.distance import distance_bin
-from .iodata import load_file
+from .iodata import (load_file, inv_trans_sample)
 from .coding import get_modules
 
 
@@ -72,6 +72,7 @@ class Conn:
     
     def reduce(self):
         """ Make sure that all nodes are connected to the rest of the network"""
+        
         self.subset_nodes(idx_node=np.logical_or(
             np.any(self.w != 0, axis=0), np.any(self.w != 0, axis=1)))
 
@@ -421,7 +422,7 @@ class EchoStateNetwork(Reservoir):
         self.w_ih[:, self.input_nodes] = self.input_gain * \
             self.w_ih[:, self.input_nodes]
 
-    def simulate(self, ext_input, ic=None, noise=False, threshold=0.5, **kwargs):
+    def simulate(self, ext_input, ic=None, leak=1.0, threshold=0.5, **kwargs):
         """
         Simulates reservoir dynamics given an external input signal
         'ext_input'
@@ -459,27 +460,16 @@ class EchoStateNetwork(Reservoir):
         if ic is not None:
             self._state[0, :] = ic
 
-        if noise:
-            delta_V, quantiles = kwargs.pop('noise_distribution')
-            samples = np.random.uniform(min(quantiles),max(quantiles),size=(self.hidden_size,1,len(timesteps)+1))
-            quantiles_mat = np.repeat(quantiles[np.newaxis,:,np.newaxis], len(timesteps)+1, axis=2)
-            bin_idx = np.argmin(np.abs(quantiles_mat-samples),axis=1)
-            beta = delta_V[bin_idx]
-
         # simulation of the dynamics
         for t in timesteps:
 
             # if (t>0) and (t%100 == 0): print(f'\t ----- timestep = {t}')
-            if noise:
-                synap_input = np.dot(
-                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih[:,:,t-1]) + beta[:,t-1]
-            else:
-                synap_input = np.dot(
-                self._state[t-1, :], self.w_hh) + np.dot(ext_input[t-1, :], self.w_ih)
+            synap_input = np.dot(
+            self._state[t-1, :], self.w_hh) * leak + np.dot(ext_input[t-1, :], self.w_ih[:,:,t-1])
             
             self._state[t, :] = self.activation_function(synap_input)
 
-        # select output nodes and remove initial condition (to match the time index of
+        # remove initial condition (to match the time index of
         # _state and ext_input)
         self._state = self._state[1:,:]
         # self._state = self._state[1:, self.output_nodes]
@@ -499,10 +489,9 @@ class EchoStateNetwork(Reservoir):
         self.ic: (1, N) numpy.ndarray
             initial activation states of reservoir
         """
-        voltages, quantiles = kwargs.pop('voltage_distribution')
-        samples = np.random.uniform(min(quantiles),max(quantiles),size=(self.hidden_size,1))
-        bin_idx = np.argmin(np.abs(quantiles[np.newaxis,:]-samples),axis=1)
-        self.ic = voltages[bin_idx]
+        # voltages, quantiles = kwargs.pop('voltage_distribution')
+        # self.ic = inv_trans_sample(self.hidden_size,voltages,quantiles)
+        self.ic = np.random.normal(scale=2.8706e-2, size=self.hidden_size)
         return self.ic
 
     def set_activation_function(self, function):

@@ -42,7 +42,7 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-                         sheet_name="Sheet1", engine="openpyxl")
+                         sheet_name="fully_connected", engine="openpyxl")
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
@@ -66,7 +66,7 @@ if task_name == 'spatial_classification_v0':
     n_pres = 60  # number of presentations of each pattern
     trial_duration = 305
     stim_duration = 5
-    pre_stim_washout = 50
+    pre_stim_washout = 49
     post_stim = trial_duration - stim_duration - pre_stim_washout
     stim_onset = pre_stim_washout + 1
     stim_offset = pre_stim_washout + stim_duration
@@ -90,16 +90,16 @@ input_set = np.concatenate(input_patterns)
 # total number of nodes used for input across all patterns -- do not select any of these for output
 n_input_nodes = len(input_set)
 
-output_nodes = np.array([38, 40, 43, 44, 47, 49])
-output_col_n = 8
-n_output_nodes = len(output_nodes) # number of nodes in each set defined below
+# output_nodes = np.array([38, 40, 43, 44, 47, 49])
+# output_col_n = 8
+# n_output_nodes = len(output_nodes) # number of nodes in each set defined below
 
 n_trials = n_patterns*n_pres
 n_training_trials = round(n_pres*frac_train)  # for each pattern
 n_testing_trials = round(n_pres*(1-frac_train))  # for each pattern
 
 # Metrics to evaluate the regression model for RC output
-alphas = np.linspace(0.2, 2.0, num=10)
+# alphas = np.array([0.8]) # np.linspace(0.2, 2.0, num=10)
 # np.concatenate((np.linspace(0.2, 1.2, num=6), np.arange(
 #     2.0, 7.0, 1.0)))  # np.linspace(0.2, 3.0, num=15)
 
@@ -132,138 +132,138 @@ for idx, file in names.items():
     conn = reservoir.Conn(
         w=None, conn_data=f'{file}.csv', conn_data_dir=CONN_DATA)
 
-    # conn.reduce()
+    conn.reduce()
 
-    # if conn.n_nodes != 59:
-    #     input("Cannot implement network. Not fully connected. Press Enter to continue.")
-    #     continue
-
-    # scale conenctivity weights between [0,1] and normalize by spectral radius
-    try:
-        conn.scale_and_normalize()
-    except ValueError:
-        input(
-            "Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+    if conn.n_nodes != 59:
+        input("Cannot implement network. Not fully connected. Press Enter to continue.")
         continue
 
-    for alpha in alphas:
-        if 0.2 <= alpha < 0.8:
-            regime = 'stable'
-        elif 0.8 <= alpha < 1.4:
-            regime = 'critical'
-        else:
-            regime = 'chaotic'
+    # # scale conenctivity weights between [0,1] and normalize by spectral radius
+    # try:
+    #     conn.scale_and_normalize()
+    # except ValueError:
+    #     input(
+    #         "Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+    #     continue
 
-        print(
-            f'\n----------------------- alpha = {alpha} -----------------------')
+    # for alpha in alphas:
+    #     if 0.2 <= alpha < 0.8:
+    #         regime = 'stable'
+    #     elif 0.8 <= alpha < 1.4:
+    #         regime = 'critical'
+    #     else:
+    #         regime = 'chaotic'
 
-        alpha_dict = {
-            'name': file,
-            'age': ages[idx],
-            'genotype': genotypes[idx],
-            'sample id': samples[idx],
-            'alpha': np.round(alpha, 3),
-            'regime': regime,
-            'rho': conn.spectral_radius}
-            
-        rs = np.zeros((n_trials, conn.n_nodes))
+    #     print(
+    #         f'\n----------------------- alpha = {alpha} -----------------------')
 
-        pattern_0 = True
-        pattern_1 = True
-
-        # TRAINING
-        for trial in range(n_trials):
-
-            pattern = y[trial]
-
-            # select stimulation pattern input nodes according to sequence
-            w_in = np.random.normal(scale=1.7416e-2, size=(n_features, conn.n_nodes, trial_duration))
-            stim_input_nodes = input_patterns[pattern]
-            w_in[:,stim_input_nodes,stim_onset:stim_offset] = np.ones(
-                n_features, dtype=int)
-
-            # instantiate an Echo State Network object
-            ESN = reservoir.EchoStateNetwork(w_ih=w_in,
-                                            w_hh=conn.w * alpha,
-                                            activation_function='tanh')
-
-            ic = ESN.set_initial_condition(**kwargs)
-
-            # simulate reservoir states; returns states of all reservoir nodes
-            # returns activity of all nodes
-            rs_trial = ESN.simulate(
-                ext_input=x, ic=ic, leak=1.0, **kwargs)
-            
-            if plot_diagnostics:
-                if (pattern_1 and pattern) or (pattern_0 and not pattern):
-                    plotting.plot_time_series_raster(rs_trial, num=fig_num, title=f'{file}_alpha_{np.round(alpha, 3)}_trial_{trial}_pattern_{pattern}.png',
-                                    savefig=True, **kwargs)
-                    if pattern: pattern_1 = False
-                    if not pattern: pattern_0 = False
-                    fig_num += 1
-
-            rs_trial = ESN.add_washout_time(
-                rs_trial, idx_washout=pre_stim_washout)[0] # +stim_duration # return first item in tuple
-
-            rs[trial, :] = np.mean(rs_trial, axis=0)
-
-        # ROWS
-        # output_sets = np.array([
-        #     [20, 23, 28, 29, 34, 37],
-        #     [18, 21, 26, 31, 36, 39],
-        #     [15, 16, 25, 32, 41, 42],
-        #     [13, 12, 3, 55, 46, 45],
-        #     [10, 7, 2, 56, 51, 48],
-        #     [8, 5, 0, 58, 53, 50],
-        #     [6, 4, 1, 57, 54, 52]])
+    alpha_dict = {
+        'name': file,
+        'age': ages[idx],
+        'genotype': genotypes[idx],
+        'sample id': samples[idx],
+        # 'alpha': np.round(alpha, 3),
+        # 'regime': regime,
+        'rho': conn.spectral_radius}
         
-        # COLUMNS
-        # output_sets = np.array([
-        # [20, 18, 15, 13, 10, 8],
-        # [23, 21, 16, 12, 7, 5],
-        # [28, 26, 25, 3, 2, 0],
-        # [29, 31, 32, 55, 56, 58],
-        # [34, 36, 41, 46, 51, 53],
-        # [37, 39, 42, 45, 48, 50],
-        # [38, 40, 43, 44, 47, 49]])
+    rs = np.zeros((n_trials, conn.n_nodes))
 
-        # TESTING
-        # rs_output = np.delete(rs, input_set, axis=1)
-        rs_output = rs[:, output_nodes]  # activity of just output nodes
-        rs_train, rs_test = iodata.split_dataset(rs_output, frac_train=frac_train)
+    pattern_0 = True
+    pattern_1 = True
 
+    # TRAINING
+    for trial in range(n_trials):
+
+        pattern = y[trial]
+
+        # select stimulation pattern input nodes according to sequence
+        w_in = np.random.normal(scale=1.7416e-2, size=(n_features, conn.n_nodes, trial_duration))
+        stim_input_nodes = input_patterns[pattern]
+        w_in[:,stim_input_nodes,stim_onset:stim_offset] = np.ones(
+            n_features, dtype=int)
+
+        # instantiate an Echo State Network object
+        ESN = reservoir.EchoStateNetwork(w_ih=w_in,
+                                        w_hh=conn.w,# * alpha,
+                                        activation_function='tanh')
+
+        ic = ESN.set_initial_condition(**kwargs)
+
+        # simulate reservoir states; returns states of all reservoir nodes
+        # returns activity of all nodes
+        rs_trial = ESN.simulate(
+            ext_input=x, ic=ic, leak=1.0, **kwargs)
+        
         if plot_diagnostics:
-            plotting.plot_time_series_raster(rs_output, num=fig_num, title=f'{file}_unscaled_readout_activity.png', # _alpha_{np.round(alpha, 3)}
-                            savefig=True, **kwargs)
-            fig_num += 1
+            if (pattern_1 and pattern) or (pattern_0 and not pattern):
+                plotting.plot_time_series_raster(rs_trial, num=fig_num, title=f'{file}_alpha_{np.round(alpha, 3)}_trial_{trial}_pattern_{pattern}.png',
+                                savefig=True, **kwargs)
+                if pattern: pattern_1 = False
+                if not pattern: pattern_0 = False
+                fig_num += 1
 
-        df_alpha, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
-                                            target=(y_train, y_test),
-                                            model=model,
-                                            metric=['score'])
-        
-        # join alpha dictionary and df_alpha
-        if df_alpha.at[0, 'score'] >= 0.5:
-            alpha_dict['score'] = df_alpha.at[0, 'score']
-        else:
-            alpha_dict['score'] = 0.5
+        rs_trial = ESN.add_washout_time(
+            rs_trial, idx_washout=pre_stim_washout)[0] # +stim_duration # return first item in tuple
 
-        df_sample_ls.append(alpha_dict) # | network_data.iloc[sample_id].to_dict() | ephys_data.iloc[sample_id].to_dict())
+        rs[trial, :] = np.mean(rs_trial, axis=0)
 
-        # if plot_diagnostics:
+    # ROWS
+    # output_sets = np.array([
+    #     [20, 23, 28, 29, 34, 37],
+    #     [18, 21, 26, 31, 36, 39],
+    #     [15, 16, 25, 32, 41, 42],
+    #     [13, 12, 3, 55, 46, 45],
+    #     [10, 7, 2, 56, 51, 48],
+    #     [8, 5, 0, 58, 53, 50],
+    #     [6, 4, 1, 57, 54, 52]])
+    
+    # COLUMNS
+    # output_sets = np.array([
+    # [20, 18, 15, 13, 10, 8],
+    # [23, 21, 16, 12, 7, 5],
+    # [28, 26, 25, 3, 2, 0],
+    # [29, 31, 32, 55, 56, 58],
+    # [34, 36, 41, 46, 51, 53],
+    # [37, 39, 42, 45, 48, 50],
+    # [38, 40, 43, 44, 47, 49]])
 
-        #     figsize = (19.2, 9.43)
+    # TESTING
+    # rs_output = np.delete(rs, input_set, axis=1)
+    rs_output = rs #[:, output_nodes]  # activity of just output nodes
+    rs_train, rs_test = iodata.split_dataset(rs_output, frac_train=frac_train)
 
-        #     plotting.plot_time_series(y_test, feature_set='data', xlim=[
-        #                             0, n_testing_trials*n_patterns], figsize=figsize, subplot=(1, 1, 1), legend_label='Target output', num=fig_num)
-        #     plotting.plot_time_series(rs_test, feature_set='pred', xlim=[0, n_testing_trials*n_patterns], xticks=range(0, n_testing_trials*n_patterns), model=modelout,
-        #                             figsize=figsize, subplot=(1, 1, 1), legend_label='Predicted output', block=False, num=fig_num,
-        #                             savefig=True, title=f'{file}_{alpha}_performance')
-        #     fig_num += 1
+    # if plot_diagnostics:
+    #     plotting.plot_time_series_raster(rs_output, num=fig_num, title=f'{file}_activity_readout.png', # _alpha_{np.round(alpha, 3)}
+    #                     savefig=True, **kwargs)
+    #     fig_num += 1
+
+    df_alpha, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
+                                        target=(y_train, y_test),
+                                        model=model,
+                                        metric=['score'])
+    
+    # join alpha dictionary and df_alpha
+    if df_alpha.at[0, 'score'] >= 0.5:
+        alpha_dict['score'] = df_alpha.at[0, 'score']
+    else:
+        alpha_dict['score'] = 0.5
+
+    df_sample_ls.append(alpha_dict) # | network_data.iloc[sample_id].to_dict() | ephys_data.iloc[sample_id].to_dict())
+
+    # if plot_diagnostics:
+
+    #     figsize = (19.2, 9.43)
+
+    #     plotting.plot_time_series(y_test, feature_set='data', xlim=[
+    #                             0, n_testing_trials*n_patterns], figsize=figsize, subplot=(1, 1, 1), legend_label='Target output', num=fig_num)
+    #     plotting.plot_time_series(rs_test, feature_set='pred', xlim=[0, n_testing_trials*n_patterns], xticks=range(0, n_testing_trials*n_patterns), model=modelout,
+    #                             figsize=figsize, subplot=(1, 1, 1), legend_label='Predicted output', block=False, num=fig_num,
+    #                             savefig=True, title=f'{file}_{alpha}_performance')
+    #     fig_num += 1
 
 df_sample = pd.DataFrame(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{today}_all_networks_scaled_5_inputs_6_outputs_5_stim_post_stim.csv')
+    f'{PROJ_DIR}/dataframes/{today}_all_networks_unscaled_5_inputs_6_outputs_5_stim_post_stim.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe
@@ -284,21 +284,21 @@ if plot_perf_curves:
     
     m = 'score'
 
-    plotting.plot_performance_curve(df_sample, y=m, ylim=[0, 1], xlim=[min(alphas), max(alphas)],
-                                    hue="genotype", hue_order=["WT", "HE", "KO"],figsize=figsize,
-                                    savefig=True, title=f'{task_name}_{dataset}_all_networks_scaled_5_inputs_6_outputs_5_stim_post_stim', **kwargs)
+    # plotting.plot_performance_curve(df_sample, y=m, ylim=[0, 1], xlim=[min(alphas), max(alphas)],
+    #                                 hue="genotype", hue_order=["WT", "HE", "KO"],figsize=figsize,
+    #                                 savefig=True, title=f'{task_name}_{dataset}_all_networks_scaled_5_inputs_6_outputs_5_stim_post_stim', **kwargs)
 
     # plotting.plot_line_plot(df_sample, x='output_col_n', title="Performance vs input-output distance", y='score', ylabel='R squared', xlim=None, ticks=None, ylim=[0,1], xlabel="Output column number",
     #               hue='genotype', hue_order=["WT", "HE", "KO"], chance_perf=0.5,
     #               figsize=(19.2, 9.43),savefig=True, show=False, block=True)
     
-    # # plotting performance for unscaled networks
-    # plotting.plot_perf_reg(df_sample, x='rho',ylim=[0,1], xlim=[0,6],
-    #                     hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
-    # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
+    # plotting performance for unscaled networks
+    plotting.plot_perf_reg(df_sample, x='rho',ylim=[0,1],
+                        hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
+    figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
 
-    # plotting.boxplot(df=df_sample, x='genotype', y=m, ylim=[0,1],chance_perf=0.5, order=["WT", "HE", "KO"], hue='genotype', hue_order=["WT", "HE", "KO"], legend=False,
-    #                     figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+    plotting.boxplot(df=df_sample, x='genotype', y=m, ylim=[0,1],chance_perf=0.5, order=["WT", "HE", "KO"], hue='genotype', hue_order=["WT", "HE", "KO"], legend=False,
+                        figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
     
     # plotting.parallel_plot(df_sample, 'score', 'original_score', c='rho', cb_norm='log',cmap='coolwarm',
     #     cb_label="log(rho)", xlabels=["Original", "Rescaled to alpha = 1"], ylabel="R squared", savefig=True,

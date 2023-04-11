@@ -173,7 +173,7 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squar
     # plt.close()
 
 def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, ticks=None, ylim=None, xlabel=None,
-                  hue='genotype', hue_order=["WT", "HE", "KO"], size=None,
+                  hue=None, hue_order=None, size=None,size_order=None,palette=None,
     chance_perf=0.5, figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
 
     fig = plt.figure(figsize=figsize)
@@ -185,7 +185,6 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, t
                 hue_order = ["WT", "HE", "KO"]
 
     if size == 'age': size_order=kwargs.get('ages')
-
     g = sns.scatterplot(data=df,
             x=x,
             y=y,

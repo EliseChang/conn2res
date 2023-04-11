@@ -452,3 +452,21 @@ def get_sample_weight(inputs, labels, sample_block=None):
 
 
     return sample_weight
+
+def io_dist(inputs,outputs):
+    idx = np.array([24,26,29,32,35,37,21,22,25,30,31,36,39,40,19,20, 23,28,33,38,41,42,
+            16,17,18,27,34,43,44,45,15,14,13,4,57,48,47,46,12,11,8,3,58,53,50,49,
+            10,9,6,1,60,55,52,51,7,5,2,59,56,54]) - 1
+    coords = np.array([21,31, 41, 51, 61, 71, 12, 22, 32, 42, 52, 62, 72, 82, 13, 23, 33, 43, 53, 63,
+            73, 83, 14, 24, 34, 44, 54, 64, 74, 84, 15, 25, 35, 45, 55, 65, 75, 85, 16, 26,
+            36, 46, 56, 66, 76, 86, 17, 27, 37, 47, 57, 67, 77, 87, 28, 38, 48, 58, 68, 78])
+    output_coords = np.array(coords[[np.where(idx == c)[0][0] for c in outputs]])
+    all_dist = np.zeros((len(output_coords),1))
+    for idx,val in np.ndenumerate(output_coords):
+        output_vec = np.array([int(u) for u in str(val)])
+        dist = np.mean(np.linalg.norm((inputs-output_vec),axis=1))
+        all_dist[idx] = dist
+    mean_dist = np.mean(all_dist)
+    return mean_dist
+
+

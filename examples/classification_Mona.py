@@ -25,8 +25,8 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # %% Set global variables
 
 # Metaparameters
-import_dataframe = 1
-dataframe_name = 'Mona_classification_MEA-Mecp2_Mona_stim_dataset_conn2res_2023-03-29_spike_rates_all_treatments_all_output_nodes.csv'  # name of previously generated .csv dataframe
+import_dataframe = 0
+dataframe_name = ''  # name of previously generated .csv dataframe
 plot_diagnostics = 0
 plot_perf_curves = 1
 
@@ -43,12 +43,14 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-                         sheet_name=state_var, engine="openpyxl")
+                         sheet_name=f'{state_var} (2)', engine="openpyxl")
 names = metadata["Stimulation pair name"]
 sample_ids = metadata["Sample ID"]
-baseline_recs = metadata["Baseline file name"]
+# baseline_recs = metadata["Baseline file name"]
 pattern_0_recs = metadata["Hub stimulation file name"]
 pattern_1_recs = metadata["Peripheral stimulation file name"]
+pre_pattern_0_recs = metadata["Pre-hub stimulation file name"]
+pre_pattern_1_recs = metadata["Pre-per stimulation file name"]
 ages = metadata["Age"]
 treatment = metadata["Treatment aggregated"]
 
@@ -59,17 +61,21 @@ task_name = 'Mona_classification'
 
 # Get pattern data
 n_patterns = 2
-n_pres = 60  # number of presentations of each pattern
-pattern_0_inputs = metadata["Hub input node index"]
-pattern_1_inputs = metadata["Peripheral input node index"]
+n_pres = 60  # 60 number of presentations of each pattern
+pattern_0_idx = metadata["Hub input node index"]
+pattern_1_idx = metadata["Peripheral input node index"]
+pattern_0_coord = metadata["Hub input node coord"]
+pattern_1_coord = metadata["Peripheral input node coord"]
 kwargs = {}
 
-output_nodes = np.array([35, 40, 43, 44]) # [0,1,5,6]
-n_output_nodes = len(output_nodes)
+# output_nodes = np.array([0, 11, 23, 31, 44, 50]) # [0,1,5,6]
+# n_output_nodes = len(output_nodes)
 n_trials = n_patterns*n_pres
 n_training_trials = round(n_pres*frac_train)  # for each pattern
 n_testing_trials = round(n_pres*(1-frac_train))  # for each pattern
 n_channels = 60
+
+# Split into early and late
 
 n_run = 100 # random training-testing split
 
@@ -87,15 +93,17 @@ model = RidgeClassifier(alpha=1e-8, fit_intercept=True)
 
 # file = "OWT220207_1H_DIV57_3UA_STIM"
 # idx = 0
+
 for idx,file in names.items():
             
     # Exclude stimulation and reference nodes
-    exclude_nodes = [pattern_0_inputs[idx], pattern_1_inputs[idx], 14]
+    exclude_nodes = [pattern_0_idx[idx], pattern_1_idx[idx], 14]
     rs_nodes = [n for n in range(n_channels) if n not in exclude_nodes]
 
-# for channel in range(59):
-        
-        # if channel not in exclude_nodes:
+    # # Get input node coords
+    # input_coords = np.array([[int(u) for u in str(pattern_0_coord[idx])],
+    #                         [int(u) for u in str(pattern_1_coord[idx])]])
+
 
     print(
     f'\n*************** file = {file} ***************')
@@ -103,18 +111,20 @@ for idx,file in names.items():
     # fetch data
     net_response_0 = pd.read_csv(os.path.join(MEA_DATA, f'{pattern_0_recs[idx]}.csv'),header=None).to_numpy()
     net_response_1 = pd.read_csv(os.path.join(MEA_DATA, f'{pattern_1_recs[idx]}.csv'),header=None).to_numpy()
-    # net_response_0 = net_response_0[:,output_nodes]
-    # net_response_1 = net_response_1[:,output_nodes]
 
-    rs_control = pd.read_csv(os.path.join(MEA_DATA, f'{baseline_recs[idx]}.csv'),header=None).to_numpy()    
-    # rs_control = rs_control[:,output_nodes]
-    rs_control = np.delete(rs_control, exclude_nodes, axis=1)
+    control_0 = pd.read_csv(os.path.join(MEA_DATA, f'{pre_pattern_0_recs[idx]}.csv'),header=None).to_numpy()
+    control_1 = pd.read_csv(os.path.join(MEA_DATA, f'{pre_pattern_1_recs[idx]}.csv'),header=None).to_numpy()
+    # np.random.shuffle(rs_control)
 
-    stim_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
-    control_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
+    # stim_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
+    # control_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
 
     for run in range(0,n_run):
-            
+
+        # randomly select output nodes and calculate input-output distance
+        # output_nodes = random.sample(rs_nodes, n_output_nodes)
+        # io_dist = iodata.io_dist(input_coords, output_nodes)
+
         # randomly select testing trials
         testing_trial_idx_0 = random.sample(range(n_pres), n_testing_trials)
         testing_trials_0 = net_response_0[testing_trial_idx_0,:]
@@ -123,14 +133,18 @@ for idx,file in names.items():
         testing_trials_1 = net_response_1[testing_trial_idx_1,:]
 
         rs_test = np.concatenate((testing_trials_0, testing_trials_1), axis=0)
-        y_test = np.concatenate((np.zeros(n_testing_trials,dtype='int64'), np.ones(n_testing_trials,dtype='int64')), axis=0)
         rs_test = np.delete(rs_test, exclude_nodes, axis=1)
+        y_test = np.concatenate((np.zeros(n_testing_trials,dtype='int64'),
+                                np.ones(n_testing_trials,dtype='int64')), axis=0)
 
         training_trials_0 = np.delete(net_response_0, testing_trial_idx_0, axis=0)
         training_trials_1 = np.delete(net_response_1, testing_trial_idx_1, axis=0)
         rs_train = np.concatenate((training_trials_0, training_trials_1), axis=0)
         y_train = np.concatenate((np.zeros(n_training_trials,dtype='int64'), np.ones(n_training_trials,dtype='int64')), axis=0)
         rs_train = np.delete(rs_train, exclude_nodes, axis=1)
+
+        # rs_test_run = rs_test[:,output_nodes]
+        # rs_train_run = rs_train[:,output_nodes]
 
         print("Stimulation")
         df_stim, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
@@ -143,15 +157,28 @@ for idx,file in names.items():
         df_stim['Treatment'] = treatment[idx]
         df_stim['run'] = run
         df_stim['group'] = "stimulation"
+        # df_stim['io_dist'] = io_dist
         df_sample_ls.append(df_stim)
 
-        stim_weights[run,:] = modelout.coef_
+        # stim_weights[run,:] = modelout.coef_
 
         # Fetch control data
-        # rs_control = rs_control[:, output_nodes]
-        
-        np.random.shuffle(rs_control)
-        rs_train,rs_test = iodata.split_dataset((rs_control), frac_train=frac_train)
+        # rs_control = np.delete(rs_control, exclude_nodes, axis=1)
+        testing_trials_0 = net_response_0[testing_trial_idx_0,:]
+        # rs_control_run = rs_control[:, output_nodes]
+        # rs_train_run,rs_test_run = iodata.split_dataset((rs_control), frac_train=frac_train)
+
+        # randomly select testing trials
+        testing_trials_0 = control_0[testing_trial_idx_0,:]
+        testing_trials_1 = control_1[testing_trial_idx_1,:]
+
+        rs_test = np.concatenate((testing_trials_0, testing_trials_1), axis=0)
+        rs_test = np.delete(rs_test, exclude_nodes, axis=1)
+        training_trials_0 = np.delete(control_0, testing_trial_idx_0, axis=0)
+        training_trials_1 = np.delete(control_1, testing_trial_idx_1, axis=0)
+        rs_train = np.concatenate((training_trials_0, training_trials_1), axis=0)
+        y_train = np.concatenate((np.zeros(n_training_trials,dtype='int64'), np.ones(n_training_trials,dtype='int64')), axis=0)
+        rs_train = np.delete(rs_train, exclude_nodes, axis=1)
 
         print("Control")
         df_control, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
@@ -166,7 +193,7 @@ for idx,file in names.items():
         df_control['group'] = "control"
         df_sample_ls.append(df_control)
 
-        control_weights[run,:] = modelout.coef_
+        # control_weights[run,:] = modelout.coef_
 
     # Plot diagnostics
     if plot_diagnostics:
@@ -189,7 +216,7 @@ for idx,file in names.items():
 
 df_sample = pd.concat(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_all_treatments_random_output_nodes.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_proper_control.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe
@@ -209,7 +236,13 @@ if plot_perf_curves:
         plotting.boxplot('group', 'score', sample_data, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], xticklabs=["Stimulation", "Control"], ylabel="Classification accuracy", chance_perf=0.5,
                             title=f'{names[idx]}_{state_var}_classification_accuracy.png')
         
-    # Plot classification accuracy against control for each sample
+        # stim_data = sample_data[sample_data['group'] == 'stimulation'].reset_index()
+        
+        # plotting.plot_perf_reg(df=stim_data,x='io_dist',ylabel='Classification accuracy',ylim=[0,1],
+        #                        xlabel='Mean input-output distance',savefig=True,
+        #                        title=f'{names[idx]}_{state_var}_input-output_dist.png')
+        
+    # Plot classification accuracy against control for all samples
     df_regrouped = df_sample.groupby('name').mean()
     df_regrouped['group'] = np.tile(["stimulation", "control"],len(sample_ids))
     plotting.boxplot(x='group', y='score', df=df_regrouped, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], xticklabs=["Stimulation", "Control"],ylabel="Classification accuracy", chance_perf=0.5,

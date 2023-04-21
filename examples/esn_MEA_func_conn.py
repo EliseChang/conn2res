@@ -26,14 +26,14 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # Metaparameters
 import_dataframe = 0
 dataframe_name = '' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
-reduce = 1
+reduce = 0
 plot_diagnostics = 0
-plot_perf_curves = 0
+plot_perf_curves = 1
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-dataset = "MEA-Mecp2_2020_dataset_conn2res"
-CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity', dataset)
+dataset = "MEA-Mecp2_2022_dataset_conn2res"
+CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity')
 # NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
 # EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
 METADATA = f"{dataset}.xlsx"
@@ -43,32 +43,40 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-            sheet_name="0.95_thr", engine="openpyxl") # "0.95_thr"
+            sheet_name="Sheet1", engine="openpyxl")
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
+sample_ids = metadata["Sample ID"]
+size = metadata["Size"]
 
 # Input node selection
-n_input_nodes = 5
-n_output_nodes = 5
-nruns = 1
+n_channels = 58
+input_nodes = np.array([19, 17, 14, 11, 9])
+n_input_nodes = len(input_nodes)
+output_nodes = np.array([38, 40, 43, 44, 47, 49]) # np.array([n for n in range(n_channels) if n not in input_nodes])
+n_output_nodes = len(output_nodes)
+
+input_sf = 10
+n_timesteps = 2500
+nruns = 60
 
 # Get trial-based dataset for task
 task_name = 'mackey_glass'
 
 if task_name == 'mackey_glass':
-    tau = 30
-    horizon = 30
-    kwargs = {'n_timesteps': 4000, 'tau': tau, 'horizon': horizon}
+    tau = 15
+    horizon = 10
+    kwargs = {'n_timesteps': n_timesteps, 'tau': tau, 'horizon': horizon, 'input_sf': input_sf}
 elif task_name == 'MemoryCapacity':
     horizon = -25
-    kwargs = {'n_timesteps': 4000, 'horizon': horizon}
+    kwargs = {'n_timesteps': n_timesteps, 'horizon': horizon}
 
 idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
 metrics = ['score'] # , 'mse', 'nrmse'
-alphas = np.array([1.0]) # np.linspace(0.2, 3.0, num=15) # np.array([0.2, 0.8, 1.0, 1.2, 2.0])
+alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.array([1.0]) # np.linspace(0.2, 3.0, num=15)
 
 # %% Main
 
@@ -87,30 +95,30 @@ for idx,file in names.iteritems():
     # if conn.n_nodes < n_input_nodes + n_output_nodes:
     #     input("Cannot implement network. Total nodes must be greater than specified input nodes.  Press Enter to continue.")
     #     continue
-    # # scale conenctivity weights between [0,1] and normalize by spectral radius
+    # scale conenctivity weights between [0,1] and normalize by spectral radius
     try:
         conn.scale_and_normalize()
     except ValueError:
         # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
-    # # generate and fetch data
-    # x, y = iodata.fetch_dataset(task_name, **kwargs)
+    # generate and fetch data
+    x, y = iodata.fetch_dataset(task_name, **kwargs)
 
-    # # split trials into training and test sets
-    # x_train, x_test, y_train, y_test = iodata.split_dataset(
-    #     x, y, frac_train=0.75)
+    # split trials into training and test sets
+    x_train, x_test, y_train, y_test = iodata.split_dataset(
+        x, y, frac_train=0.8)
 
-    # # number of features in task data
-    # n_features = x_train.shape[1]
+    # number of features in task data
+    n_features = x_train.shape[1]
 
-    # # define model for RC ouput
-    # model = Ridge(alpha=1e-8, fit_intercept=True)
+    # define model for RC ouput
+    model = Ridge(alpha=1e-8, fit_intercept=True)
 
     for alpha in alphas:
         if 0.2 <= alpha < 0.8:
             regime = 'stable'
-        elif 0.8 <= alpha < 1.4:
+        elif 0.8 <= alpha < 1.2:
             regime = 'critical'
         else:
             regime = 'chaotic'
@@ -118,7 +126,7 @@ for idx,file in names.iteritems():
         print(
             f'\n----------------------- alpha = {alpha} -----------------------')
 
-        # scores = {m:[] for m in metrics}
+        scores = {m:[] for m in metrics}
 
         # find rho
         from scipy.linalg import eigh
@@ -134,7 +142,7 @@ for idx,file in names.iteritems():
             'alpha': np.round(alpha, 3),
             'regime': regime}
         
-        # for run in range(nruns):
+        for run in range(nruns):
 
         #     # we select a random set of input nodes
         #     if reduce:
@@ -148,68 +156,71 @@ for idx,file in names.iteritems():
         #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
         #     output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_nodes)
 
-        #     # create input connectivity matrix
-        #     w_in = np.zeros((n_features, conn.n_nodes))
-        #     w_in[:, input_nodes] = np.eye(n_features)
+            # create input connectivity matrix
+            w_in = np.random.normal(scale=1e-3, size=(n_features, conn.n_nodes, n_timesteps))
+            w_in[:,input_nodes,:] = np.ones(
+                n_features, dtype=int)
         
-        #     # instantiate an Echo State Network object
-        #     ESN = reservoir.EchoStateNetwork(w_ih=w_in,
-        #                                         w_hh=conn.w * alpha,
-        #                                         activation_function='tanh',
-        #                                         #  input_gain=10.0,
-        #                                         input_nodes=input_nodes,
-        #                                         output_nodes=output_nodes
-        #                                         )
+            # instantiate an Echo State Network object
+            ESN = reservoir.EchoStateNetwork(w_ih=w_in,
+                                                w_hh=conn.w * alpha,
+                                                activation_function='tanh',
+                                                input_nodes=input_nodes,
+                                                output_nodes=output_nodes
+                                                )
 
-        #     # simulate reservoir states; select only output nodes.
-        #     rs_train = ESN.simulate(ext_input=x_train)
-        #     rs_test = ESN.simulate(ext_input=x_test)
+            # Set random initial condition
+            ic = ESN.set_initial_condition()
 
-        #     # plot reservoir activity before washout
-        #     # plotting.plot_time_series_raster(rs_train, xlim=[0,len(rs_train)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_training",
-        #     #                 savefig=True, block=True)
-        #     # plotting.plot_time_series_raster(rs_test, xlim=[0,len(rs_test)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_testing",
-        #     #                 savefig=True, block=True)
+            # simulate reservoir states; select only output nodes.
+            rs_train = ESN.simulate(ext_input=x_train, ic=ic)[:,output_nodes]
+            rs_test = ESN.simulate(ext_input=x_test, ic=ic)[:,output_nodes]
 
-        #     rs_train, rs_test, y_train2, y_test2 = ESN.add_washout_time(
-        #         rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
+            # # plot reservoir activity before washout
+            # plotting.plot_time_series_raster(rs_train, xlim=[0,len(rs_train)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_training",
+            #                 savefig=True, block=True)
+            # plotting.plot_time_series_raster(rs_test, xlim=[0,len(rs_test)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_testing",
+            #                 savefig=True, block=True)
 
-        #     # perform task
-        #     df_run, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
-        #                                     target=(y_train2, y_test2),
-        #                                     model=model,
-        #                                     metric=metrics)
+            rs_train, rs_test, y_train2, y_test2 = ESN.add_washout_time(
+                rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
 
-        #     for m in metrics: scores[m].append(df_run.at[0, m])
+            # perform task
+            df_run, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
+                                            target=(y_train2, y_test2),
+                                            model=model,
+                                            metric=metrics)
 
-            # if plot_diagnostics:
-            #     N = 200
-            #     tau = 100
-            #     figsize=(19.2, 9.43)
-            #     sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
-            #     plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
-            #                                 figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
-            #     plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
-            #                                             figsize=figsize, subplot=(3, 3, 3), block=False)
+            for m in metrics: scores[m].append(df_run.at[0, m])
 
-            #     sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
-            #     plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
-            #                                 figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
-            #     plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
-            #                                 figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
-            #     plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
-            #                                             ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
+            if plot_diagnostics:
+                N = 200
+                tau = 100
+                figsize=(19.2, 9.43)
+                sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
+                plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
+                plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
+                                                        figsize=figsize, subplot=(3, 3, 3), block=False)
 
-            #     plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
-            #                                 figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
-            #                                 savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
+                sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
+                plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
+                plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
+                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
+                plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
+                                                        ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
+
+                plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
+                                            figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
+                                            savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
         
-        # for m in metrics: alpha_dict[m] = np.mean(scores[m])
+        for m in metrics: alpha_dict[m] = np.mean(scores[m])
         subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() | network_data.iloc[idx].to_dict())
 
 df_subj = pd.DataFrame(subj_ls)
 df_subj.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_with_network_size.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_noise_fixed_input_output.csv')
 print("Dataframe saved.")
 
 #%% Import dataframe

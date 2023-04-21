@@ -378,8 +378,8 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
         cb.ax.tick_params(labelsize=20)
         cb.ax.set_ylabel('Activation state', rotation=270)
 
-    if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
-    if ylim is not None: g.set_ylim(left=ylim[0], right=ylim[1])
+    if xlim is not None: ax.set_xlim(left=xlim[0], right=xlim[1])
+    if ylim is not None: ax.set_ylim(left=ylim[0], right=ylim[1])
     plt.yticks(fontsize=24)
     if ticks is not None: plt.xticks(ticks, fontsize=24)
     else: plt.xticks(fontsize=24)

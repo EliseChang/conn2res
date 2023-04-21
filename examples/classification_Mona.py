@@ -30,7 +30,7 @@ dataframe_name = ''  # name of previously generated .csv dataframe
 plot_diagnostics = 0
 plot_perf_curves = 1
 
-state_var = 'spike_rates'
+state_var = 'spike_counts'
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,16 +43,14 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-                         sheet_name=f'{state_var} (2)', engine="openpyxl")
+                         sheet_name=f'{state_var}', engine="openpyxl")
 names = metadata["Stimulation pair name"]
 sample_ids = metadata["Sample ID"]
-# baseline_recs = metadata["Baseline file name"]
+baseline_recs = metadata["Baseline file name"]
 pattern_0_recs = metadata["Hub stimulation file name"]
 pattern_1_recs = metadata["Peripheral stimulation file name"]
-pre_pattern_0_recs = metadata["Pre-hub stimulation file name"]
-pre_pattern_1_recs = metadata["Pre-per stimulation file name"]
 ages = metadata["Age"]
-treatment = metadata["Treatment aggregated"]
+treatment = metadata["Treatment"]
 
 # Get trial-based dataset for task
 frac_train = 0.8
@@ -79,8 +77,6 @@ n_channels = 60
 
 n_run = 100 # random training-testing split
 
-# Metrics to evaluate the regression model for RC output
-
 fig_num = 1
 figsize = (19.2, 9.43)
 
@@ -95,15 +91,6 @@ model = RidgeClassifier(alpha=1e-8, fit_intercept=True)
 # idx = 0
 
 for idx,file in names.items():
-            
-    # Exclude stimulation and reference nodes
-    exclude_nodes = [pattern_0_idx[idx], pattern_1_idx[idx], 14]
-    rs_nodes = [n for n in range(n_channels) if n not in exclude_nodes]
-
-    # # Get input node coords
-    # input_coords = np.array([[int(u) for u in str(pattern_0_coord[idx])],
-    #                         [int(u) for u in str(pattern_1_coord[idx])]])
-
 
     print(
     f'\n*************** file = {file} ***************')
@@ -111,13 +98,22 @@ for idx,file in names.items():
     # fetch data
     net_response_0 = pd.read_csv(os.path.join(MEA_DATA, f'{pattern_0_recs[idx]}.csv'),header=None).to_numpy()
     net_response_1 = pd.read_csv(os.path.join(MEA_DATA, f'{pattern_1_recs[idx]}.csv'),header=None).to_numpy()
+    rs_control = pd.read_csv(os.path.join(MEA_DATA, f'{baseline_recs[idx]}.csv'),header=None).to_numpy()
 
-    control_0 = pd.read_csv(os.path.join(MEA_DATA, f'{pre_pattern_0_recs[idx]}.csv'),header=None).to_numpy()
-    control_1 = pd.read_csv(os.path.join(MEA_DATA, f'{pre_pattern_1_recs[idx]}.csv'),header=None).to_numpy()
-    # np.random.shuffle(rs_control)
+    # # Exclude stimulation and reference nodes
+    # exclude_nodes = [pattern_0_idx[idx], pattern_1_idx[idx], 14]
+    # rs_nodes = [n for n in range(n_channels) if n not in exclude_nodes]
+    # net_response_0 = np.delete(net_response_0, exclude_nodes, axis=1)
+    # net_response_1 = np.delete(net_response_1, exclude_nodes, axis=1)
+    # rs_control = np.delete(rs_control, exclude_nodes, axis=1)
 
-    # stim_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
-    # control_weights = np.zeros((n_run,np.size(rs_control,axis=1)))
+    # # # Get input node coords
+    # # input_coords = np.array([[int(u) for u in str(pattern_0_coord[idx])],
+    # #                         [int(u) for u in str(pattern_1_coord[idx])]])
+
+    # # Initialise variablea for storing model weights
+    # stim_weights = np.zeros((n_run,len(rs_nodes)))
+    # control_weights = np.zeros((n_run,len(rs_nodes)))
 
     for run in range(0,n_run):
 
@@ -133,7 +129,6 @@ for idx,file in names.items():
         testing_trials_1 = net_response_1[testing_trial_idx_1,:]
 
         rs_test = np.concatenate((testing_trials_0, testing_trials_1), axis=0)
-        rs_test = np.delete(rs_test, exclude_nodes, axis=1)
         y_test = np.concatenate((np.zeros(n_testing_trials,dtype='int64'),
                                 np.ones(n_testing_trials,dtype='int64')), axis=0)
 
@@ -141,7 +136,6 @@ for idx,file in names.items():
         training_trials_1 = np.delete(net_response_1, testing_trial_idx_1, axis=0)
         rs_train = np.concatenate((training_trials_0, training_trials_1), axis=0)
         y_train = np.concatenate((np.zeros(n_training_trials,dtype='int64'), np.ones(n_training_trials,dtype='int64')), axis=0)
-        rs_train = np.delete(rs_train, exclude_nodes, axis=1)
 
         # rs_test_run = rs_test[:,output_nodes]
         # rs_train_run = rs_train[:,output_nodes]
@@ -162,23 +156,9 @@ for idx,file in names.items():
 
         # stim_weights[run,:] = modelout.coef_
 
-        # Fetch control data
-        # rs_control = np.delete(rs_control, exclude_nodes, axis=1)
-        testing_trials_0 = net_response_0[testing_trial_idx_0,:]
-        # rs_control_run = rs_control[:, output_nodes]
-        # rs_train_run,rs_test_run = iodata.split_dataset((rs_control), frac_train=frac_train)
-
-        # randomly select testing trials
-        testing_trials_0 = control_0[testing_trial_idx_0,:]
-        testing_trials_1 = control_1[testing_trial_idx_1,:]
-
-        rs_test = np.concatenate((testing_trials_0, testing_trials_1), axis=0)
-        rs_test = np.delete(rs_test, exclude_nodes, axis=1)
-        training_trials_0 = np.delete(control_0, testing_trial_idx_0, axis=0)
-        training_trials_1 = np.delete(control_1, testing_trial_idx_1, axis=0)
-        rs_train = np.concatenate((training_trials_0, training_trials_1), axis=0)
-        y_train = np.concatenate((np.zeros(n_training_trials,dtype='int64'), np.ones(n_training_trials,dtype='int64')), axis=0)
-        rs_train = np.delete(rs_train, exclude_nodes, axis=1)
+        # Split control data
+        np.random.shuffle(rs_control)
+        rs_train,rs_test = iodata.split_dataset((rs_control), frac_train=frac_train)
 
         print("Control")
         df_control, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
@@ -216,7 +196,7 @@ for idx,file in names.items():
 
 df_sample = pd.concat(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_proper_control.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_10-100ms_window_all_output_nodes.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe

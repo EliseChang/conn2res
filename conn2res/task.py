@@ -407,6 +407,7 @@ def run_task(reservoir_states, target, metric, **kwargs):
     # fit model
     score, model = func(x=(x_train, x_test), y=(
         y_train, y_test), metric=metric, **kwargs)
+    if score[0] < 0: score[0] = 0 # threshold at 0
     print(f'\t\t {metric[0]} = {score[0]}')
 
     df_res = pd.DataFrame(

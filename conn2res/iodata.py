@@ -224,7 +224,7 @@ def create_neurogymn_dataset(task, n_trials=100, add_constant=False, **kwargs):
         return inputs, labels
 
 
-def create_regression_dataset(task, horizon, n_timesteps=1000, **kwargs):
+def create_regression_dataset(task, horizon, n_timesteps, input_sf, **kwargs):
 
     # make sure horizon is a list
     if isinstance(horizon, int):
@@ -258,9 +258,15 @@ def create_regression_dataset(task, horizon, n_timesteps=1000, **kwargs):
     y = np.hstack([x[horizon_max-h:-h] for h in horizon])
     x = x[horizon_max:]
 
+    mean_centre_func = lambda x: x - x.mean()
+
     if horizon_sign == -1:
+        y = mean_centre_func(y)
+        y *= input_sf # mean and centre
         return x, y
     elif horizon_sign == 1:
+        x = mean_centre_func(x)
+        x *= input_sf # mean and centre
         if y.shape[1] == 1:
             return y, x
         else:

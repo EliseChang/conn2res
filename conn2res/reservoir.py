@@ -491,7 +491,7 @@ class EchoStateNetwork(Reservoir):
         """
         # voltages, quantiles = kwargs.pop('voltage_distribution')
         # self.ic = inv_trans_sample(self.hidden_size,voltages,quantiles)
-        self.ic = np.random.normal(scale=2.8706e-2, size=self.hidden_size)
+        self.ic = np.random.normal(scale=1, size=self.hidden_size)
         return self.ic
 
     def set_activation_function(self, function):

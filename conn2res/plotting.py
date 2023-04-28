@@ -212,10 +212,11 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, t
         l = plt.legend(fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
     else: l = plt.legend(title=hue, fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
     plt.setp(l.get_title(), fontsize='22')
-    if hue=='genotype':
-        l.legendHandles[1].set_sizes([50])
-        l.legendHandles[2].set_sizes([50])
-        l.legendHandles[3].set_sizes([50])
+
+    # if hue=='genotype':
+    #     l.legendHandles[1].set_sizes([50])
+    #     l.legendHandles[2].set_sizes([50])
+    #     l.legendHandles[3].set_sizes([50])
 
     if y=='percentage_change': g.axhline(0,color='r',linestyle='--',linewidth='2.0')
     if chance_perf is not None and y=='score':
@@ -413,14 +414,18 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
             age_data = df[df['age'] == float(DIV)]
             plot = sns.boxplot(x=x, y=y,
                         data=age_data,
+                        showmeans=True,
+                        meanprops={"marker":"+",
+                                "markerfacecolor":"white", 
+                                "markeredgecolor":"white",
+                                "markersize":"12"},
                         palette=palette,
                         hue=hue,
                         hue_order=hue_order,
                         width=width,
                         linewidth=linewidth,
                         ax=ax,
-                        **kwargs
-                        )
+                        **kwargs)
             plot.set_title(f'DIV{DIV}', loc='left', fontsize=28)
             if plot_legend:
                 sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
@@ -450,6 +455,11 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
         plot = sns.boxplot(x=x, y=y,
                         data=df,
                         order=order,
+                        showmeans=True,
+                        meanprops={"marker":"+",
+                                "markerfacecolor":"white", 
+                                "markeredgecolor":"white",
+                                "markersize":"12"},
                         palette=palette,
                         hue=hue,
                         hue_order=hue_order,

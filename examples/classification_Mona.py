@@ -27,10 +27,10 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # Metaparameters
 import_dataframe = 0
 dataframe_name = ''  # name of previously generated .csv dataframe
-plot_diagnostics = 0
+plot_diagnostics = 1
 plot_perf_curves = 1
 
-state_var = 'spike_counts'
+state_var = 'spike_rates'
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,14 +43,15 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-                         sheet_name=f'{state_var}', engine="openpyxl")
+                         sheet_name='MEC', engine="openpyxl") # f'{state_var}'
 names = metadata["Stimulation pair name"]
 sample_ids = metadata["Sample ID"]
 baseline_recs = metadata["Baseline file name"]
 pattern_0_recs = metadata["Hub stimulation file name"]
 pattern_1_recs = metadata["Peripheral stimulation file name"]
 ages = metadata["Age"]
-treatment = metadata["Treatment"]
+genotypes = metadata["Genotype"]
+# treatment = metadata["Treatment"]
 
 # Get trial-based dataset for task
 frac_train = 0.8
@@ -66,7 +67,7 @@ pattern_0_coord = metadata["Hub input node coord"]
 pattern_1_coord = metadata["Peripheral input node coord"]
 kwargs = {}
 
-# output_nodes = np.array([0, 11, 23, 31, 44, 50]) # [0,1,5,6]
+# output_nodes = np.array([6, 11, 20, 30, 40, 53]) # [0,1,5,6]
 # n_output_nodes = len(output_nodes)
 n_trials = n_patterns*n_pres
 n_training_trials = round(n_pres*frac_train)  # for each pattern
@@ -100,20 +101,20 @@ for idx,file in names.items():
     net_response_1 = pd.read_csv(os.path.join(MEA_DATA, f'{pattern_1_recs[idx]}.csv'),header=None).to_numpy()
     rs_control = pd.read_csv(os.path.join(MEA_DATA, f'{baseline_recs[idx]}.csv'),header=None).to_numpy()
 
-    # # Exclude stimulation and reference nodes
-    # exclude_nodes = [pattern_0_idx[idx], pattern_1_idx[idx], 14]
-    # rs_nodes = [n for n in range(n_channels) if n not in exclude_nodes]
-    # net_response_0 = np.delete(net_response_0, exclude_nodes, axis=1)
-    # net_response_1 = np.delete(net_response_1, exclude_nodes, axis=1)
-    # rs_control = np.delete(rs_control, exclude_nodes, axis=1)
+    # Exclude stimulation and reference nodes
+    exclude_nodes = [pattern_0_idx[idx], pattern_1_idx[idx], 14]
+    rs_nodes = [n for n in range(n_channels) if n not in exclude_nodes]
+    net_response_0 = np.delete(net_response_0, exclude_nodes, axis=1)
+    net_response_1 = np.delete(net_response_1, exclude_nodes, axis=1)
+    rs_control = np.delete(rs_control, exclude_nodes, axis=1)
 
-    # # # Get input node coords
-    # # input_coords = np.array([[int(u) for u in str(pattern_0_coord[idx])],
-    # #                         [int(u) for u in str(pattern_1_coord[idx])]])
+    # # Get input node coords
+    # input_coords = np.array([[int(u) for u in str(pattern_0_coord[idx])],
+    #                         [int(u) for u in str(pattern_1_coord[idx])]])
 
-    # # Initialise variablea for storing model weights
-    # stim_weights = np.zeros((n_run,len(rs_nodes)))
-    # control_weights = np.zeros((n_run,len(rs_nodes)))
+    # Initialise variable for storing model weights
+    stim_weights = np.zeros((n_run,len(rs_nodes)))
+    control_weights = np.zeros((n_run,len(rs_nodes)))
 
     for run in range(0,n_run):
 
@@ -145,35 +146,41 @@ for idx,file in names.items():
                                         target=(y_train, y_test),
                                         model=model,
                                         metric=['score'])
+        if df_stim.at[0, 'score'] < 0.5: df_stim['score'] = 0.5 # threshold
+
         df_stim['name'] = file
         df_stim['sample'] = sample_ids[idx]
         df_stim['age'] = ages[idx]
-        df_stim['Treatment'] = treatment[idx]
+        df_stim['genotype'] = genotypes[idx]
+        # df_stim['Treatment'] = treatment[idx]
         df_stim['run'] = run
         df_stim['group'] = "stimulation"
         # df_stim['io_dist'] = io_dist
         df_sample_ls.append(df_stim)
 
-        # stim_weights[run,:] = modelout.coef_
+        stim_weights[run,:] = modelout.coef_
 
         # Split control data
         np.random.shuffle(rs_control)
         rs_train,rs_test = iodata.split_dataset((rs_control), frac_train=frac_train)
+        # rs_test_run = rs_test[:,output_nodes]
+        # rs_train_run = rs_train[:,output_nodes]
 
         print("Control")
         df_control, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
                                         target=(y_train, y_test),
                                         model=model,
                                         metric=['score'])
+        if df_control.at[0, 'score'] < 0.5: df_control['score'] = 0.5 # threshold
         df_control['name'] = f'{file}_CONTROL'
         df_control['sample'] = sample_ids[idx]
         df_control['age'] = ages[idx]
-        df_control['Treatment'] = treatment[idx]
+        df_control['genotype'] = genotypes[idx] # ['Treatment'] = treatment[idx]
         df_control['run'] = run
         df_control['group'] = "control"
         df_sample_ls.append(df_control)
 
-        # control_weights[run,:] = modelout.coef_
+        control_weights[run,:] = modelout.coef_
 
     # Plot diagnostics
     if plot_diagnostics:
@@ -196,7 +203,7 @@ for idx,file in names.items():
 
 df_sample = pd.concat(df_sample_ls)
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_10-100ms_window_all_output_nodes.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_MEC_20-100ms_window_all_output_nodes_thresholded.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe
@@ -223,8 +230,13 @@ if plot_perf_curves:
         #                        title=f'{names[idx]}_{state_var}_input-output_dist.png')
         
     # Plot classification accuracy against control for all samples
-    df_regrouped = df_sample.groupby('name').mean()
-    df_regrouped['group'] = np.tile(["stimulation", "control"],len(sample_ids))
-    plotting.boxplot(x='group', y='score', df=df_regrouped, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], xticklabs=["Stimulation", "Control"],ylabel="Classification accuracy", chance_perf=0.5,
+    temp_df = df_sample.groupby('name').mean().reset_index()
+    temp_df['group'] = np.tile(["stimulation", "control"],len(sample_ids))
+    genotypes_col = genotypes.repeat(2).reset_index()
+    df_regrouped = temp_df.join(genotypes_col)
+
+    plotting.boxplot(x='group', y='score', df=df_regrouped, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], hue='Genotype',hue_order=["WT", "HET", "KO"],
+                     xticklabs=["Stimulation", "Control"],ylabel="Classification accuracy", chance_perf=0.5,
                             title=f'all_samples_{state_var}_classification_accuracy.png')
+    
 # %%

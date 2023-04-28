@@ -24,8 +24,8 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # %% Set global variables
 
 # Metaparameters
-import_dataframe = 0
-dataframe_name = '' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
+import_dataframe = 1
+dataframe_name = 'mackey_glass_MEA-Mecp2_2022_dataset_conn2res_2023-04-24_noise_fixed_input_output.csv' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
 reduce = 0
 plot_diagnostics = 0
 plot_perf_curves = 1
@@ -34,8 +34,8 @@ plot_perf_curves = 1
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dataset = "MEA-Mecp2_2022_dataset_conn2res"
 CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity')
-# NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
-# EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
+NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
+EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
 METADATA = f"{dataset}.xlsx"
 
 # Today's date for saving objects
@@ -51,7 +51,7 @@ sample_ids = metadata["Sample ID"]
 size = metadata["Size"]
 
 # Input node selection
-n_channels = 58
+n_channels = 59
 input_nodes = np.array([19, 17, 14, 11, 9])
 n_input_nodes = len(input_nodes)
 output_nodes = np.array([38, 40, 43, 44, 47, 49]) # np.array([n for n in range(n_channels) if n not in input_nodes])
@@ -76,13 +76,13 @@ idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
 metrics = ['score'] # , 'mse', 'nrmse'
-alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.array([1.0]) # np.linspace(0.2, 3.0, num=15)
+# alphas = np.array([0.2, 0.8, 1.0, 1.2, 2.0]) # np.array([1.0]) # np.linspace(0.2, 3.0, num=15)
 
 # %% Main
 
 subj_ls = [] # initialise list to contain dictionaries for each alpha run
-# ephys_data = pd.read_csv(EPHYS_DATA)
-# network_data = pd.read_csv(NET_DATA)
+ephys_data = pd.read_csv(EPHYS_DATA)
+network_data = pd.read_csv(NET_DATA)
 
 for idx,file in names.iteritems():
 
@@ -115,112 +115,112 @@ for idx,file in names.iteritems():
     # define model for RC ouput
     model = Ridge(alpha=1e-8, fit_intercept=True)
 
-    for alpha in alphas:
-        if 0.2 <= alpha < 0.8:
-            regime = 'stable'
-        elif 0.8 <= alpha < 1.2:
-            regime = 'critical'
-        else:
-            regime = 'chaotic'
+    # for alpha in alphas:
+    #     if 0.2 <= alpha < 0.8:
+    #         regime = 'stable'
+    #     elif 0.8 <= alpha < 1.2:
+    #         regime = 'critical'
+    #     else:
+    #         regime = 'chaotic'
 
-        print(
-            f'\n----------------------- alpha = {alpha} -----------------------')
+    #     print(
+    #         f'\n----------------------- alpha = {alpha} -----------------------')
 
-        scores = {m:[] for m in metrics}
+    scores = {m:[] for m in metrics}
 
-        # find rho
-        from scipy.linalg import eigh
-        ew, _ = eigh(conn.w)
-        rho = np.abs(ew.max())
+    # find rho
+    from scipy.linalg import eigh
+    ew, _ = eigh(conn.w)
+    rho = np.abs(ew.max())
 
-        alpha_dict = {
-            'name': file,
-            'age': ages[idx],
-            'genotype': genotypes[idx],
-            'size': conn.n_nodes,
-            'rho': rho,
-            'alpha': np.round(alpha, 3),
-            'regime': regime}
+    alpha_dict = {
+        'name': file,
+        'age': ages[idx],
+        'genotype': genotypes[idx],
+        'size': conn.n_nodes,
+        'rho': rho}
+        # 'alpha': np.round(alpha, 3),
+        # 'regime': regime}
+    
+    for run in range(nruns):
+
+    #     # we select a random set of input nodes
+    #     if reduce:
+    #         conn.reduce()
+    #         alpha_dict['size'] = conn.n_nodes
         
-        for run in range(nruns):
+    #     # else: # pass whole network but only select from connected nodes
+    #     #     input_subset = conn.reduce()
+    #     #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes,nodes_from=input_subset)
 
-        #     # we select a random set of input nodes
-        #     if reduce:
-        #         conn.reduce()
-        #         alpha_dict['size'] = conn.n_nodes
-            
-        #     # else: # pass whole network but only select from connected nodes
-        #     #     input_subset = conn.reduce()
-        #     #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes,nodes_from=input_subset)
+    #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
+    #     output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_nodes)
 
-        #     input_nodes = conn.get_nodes('random', n_nodes=n_input_nodes)
-        #     output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_nodes)
+        # create input connectivity matrix
+        w_in = np.random.normal(scale=1e-3, size=(n_features, conn.n_nodes, n_timesteps))
+        w_in[:,input_nodes,:] = np.ones(
+            n_features, dtype=int)
+    
+        # instantiate an Echo State Network object
+        ESN = reservoir.EchoStateNetwork(w_ih=w_in,
+                                            w_hh=conn.w, # * alpha,
+                                            activation_function='tanh',
+                                            input_nodes=input_nodes,
+                                            output_nodes=output_nodes
+                                            )
 
-            # create input connectivity matrix
-            w_in = np.random.normal(scale=1e-3, size=(n_features, conn.n_nodes, n_timesteps))
-            w_in[:,input_nodes,:] = np.ones(
-                n_features, dtype=int)
-        
-            # instantiate an Echo State Network object
-            ESN = reservoir.EchoStateNetwork(w_ih=w_in,
-                                                w_hh=conn.w * alpha,
-                                                activation_function='tanh',
-                                                input_nodes=input_nodes,
-                                                output_nodes=output_nodes
-                                                )
+        # Set random initial condition
+        ic = ESN.set_initial_condition()
 
-            # Set random initial condition
-            ic = ESN.set_initial_condition()
+        # simulate reservoir states; select only output nodes.
+        rs_train = ESN.simulate(ext_input=x_train, ic=ic)[:,output_nodes]
+        rs_test = ESN.simulate(ext_input=x_test, ic=ic)[:,output_nodes]
 
-            # simulate reservoir states; select only output nodes.
-            rs_train = ESN.simulate(ext_input=x_train, ic=ic)[:,output_nodes]
-            rs_test = ESN.simulate(ext_input=x_test, ic=ic)[:,output_nodes]
+        # # plot reservoir activity before washout
+        # plotting.plot_time_series_raster(rs_train, xlim=[0,len(rs_train)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_training",
+        #                 savefig=True, block=True)
+        # plotting.plot_time_series_raster(rs_test, xlim=[0,len(rs_test)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_testing",
+        #                 savefig=True, block=True)
 
-            # # plot reservoir activity before washout
-            # plotting.plot_time_series_raster(rs_train, xlim=[0,len(rs_train)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_training",
-            #                 savefig=True, block=True)
-            # plotting.plot_time_series_raster(rs_test, xlim=[0,len(rs_test)], figsize=(19.2, 9.43), title=f"{file}_reservoir_activity_testing",
-            #                 savefig=True, block=True)
+        rs_train, rs_test, y_train2, y_test2 = ESN.add_washout_time(
+            rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
 
-            rs_train, rs_test, y_train2, y_test2 = ESN.add_washout_time(
-                rs_train, rs_test, y_train, y_test, idx_washout=idx_washout)
+        # perform task
+        df_run, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
+                                        target=(y_train2, y_test2),
+                                        model=model,
+                                        metric=metrics)
 
-            # perform task
-            df_run, modelout = coding.encoder(reservoir_states=(rs_train, rs_test),
-                                            target=(y_train2, y_test2),
-                                            model=model,
-                                            metric=metrics)
+        for m in metrics: scores[m].append(df_run.at[0, m])
 
-            for m in metrics: scores[m].append(df_run.at[0, m])
+        if plot_diagnostics:
+            N = 200
+            tau = 100
+            figsize=(19.2, 9.43)
+            sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
+            plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
+                                        figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
+            plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
+                                                    figsize=figsize, subplot=(3, 3, 3), block=False)
 
-            if plot_diagnostics:
-                N = 200
-                tau = 100
-                figsize=(19.2, 9.43)
-                sample = [0+horizon, N] if horizon > 0 else [0, N+horizon]
-                plotting.plot_time_series(x_test[idx_washout+tau:], feature_set='data', xlim=[0, N], sample=sample,
-                                            figsize=figsize, subplot=(3, 3, (1, 2)), legend_label='Input', block=False)
-                plotting.plot_mackey_glass_phase_space(x_test[idx_washout:], x_test[idx_washout+tau:], xlim=[0.2, 1.4], ylim=[0.2, 1.4], color='magma', sample=sample,
-                                                        figsize=figsize, subplot=(3, 3, 3), block=False)
+            sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
+            plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
+                                        figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
+            plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
+                                        figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
+            plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
+                                                    ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
 
-                sample = [0, N-horizon] if horizon > 0 else [-horizon, N]
-                plotting.plot_time_series(y_test2[tau:N+tau-horizon], feature_set='data', xlim=[0, N], sample=sample,
-                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Label', block=False)
-                plotting.plot_time_series(rs_test[tau:], feature_set='pred', xlim=[0, N], sample=sample,
-                                            figsize=figsize, subplot=(3, 3, (4, 5)), legend_label='Predicted label', block=False, model=modelout)
-                plotting.plot_mackey_glass_phase_space(modelout.predict(rs_test[0:]), modelout.predict(rs_test[0+tau:]), xlim=[0.2, 1.4], color='magma', sample=sample,
-                                                        ylim=[0.2, 1.4], figsize=figsize, subplot=(3, 3, 6), block=False)
-
-                plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
-                                            figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
-                                            savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
-        
-        for m in metrics: alpha_dict[m] = np.mean(scores[m])
-        subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() | network_data.iloc[idx].to_dict())
+            plotting.plot_time_series(rs_test[tau:N+tau-horizon], feature_set='pc', xlim=[0, N], normalize=True, idx_features=[1, 2, 3],
+                                        figsize=figsize, subplot=(3, 3, (7, 8)), legend_label='Readout PC', block=False,
+                                        savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
+    
+    for m in metrics: alpha_dict[m] = np.mean(scores[m])
+    subj_ls.append(alpha_dict | ephys_data.iloc[idx].to_dict() | network_data.iloc[idx].to_dict())
 
 df_subj = pd.DataFrame(subj_ls)
 df_subj.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_noise_fixed_input_output.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_noise_fixed_input_output_unscaled.csv')
 print("Dataframe saved.")
 
 #%% Import dataframe
@@ -237,27 +237,82 @@ if plot_perf_curves:
     # plot performance over runs for each sample at each alpha value
     for m in metrics:
 
-        plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="genotype", hue_order=["WT", "HE", "KO"],
-        figsize=figsize, savefig=True, legend=False, title=f'{task_name}_{dataset}_performance_{m}',**kwargs)
+        # # Plot unscaled performance
+        # plotting.plot_perf_reg(df_subj, x='rho',ylim=[0,1],
+        #                 hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
+        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
 
-        # plot genotype comparisons at each developmental age
-        plotting.plot_performance_curve(df_subj, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
-        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
-        **kwargs)
-
-        # examine trends at peak performance (alpha = 1.0)
-        alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
-
-        # plot change in performance over development
-        plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
-        hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False, legend=False,
-        title=f'{task_name}_{dataset}_performance_across_development_{m}',**kwargs)
-
-        # linear regression model for performance as a function of network and electrophysiological variables
-        network_vars = ['rho'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+        # plotting.boxplot(df=df_subj, x='genotype', y=m, ylim=[0,1],order=["WT", "HE", "KO"], hue='genotype', hue_order=["WT", "HE", "KO"], legend=False,
+        #                 figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+        
+        # network_vars = ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"] # rho
+        # ephys_vars = ['NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms']
          
-        for v in network_vars: #+ ephys_vars:
-            plotting.plot_perf_reg(df_subj, x=v, xlim=[0,15], ylim=[0,1],ticks=[0,1,5,10,15],
+        # for v in network_vars: # ephys_vars:
+        #     plotting.plot_perf_reg(df_subj, x=v, ylim=[0,1],
+        #         y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+
+        # plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="genotype", hue_order=["WT", "HE", "KO"],
+        # figsize=figsize, savefig=True, legend=False, title=f'{task_name}_{dataset}_performance_{m}',**kwargs)
+
+        # new_sample_ls = []
+        # for idx,file in names.iteritems():
+        #     sample_data = df_subj[df_subj['name'] == file].reset_index()
+        #     max_idx = np.argmax(sample_data['score'])
+        #     alpha_max = sample_data.at[max_idx,'alpha']
+        #     max_score = np.max(sample_data['score'])
+        #     genotype = genotypes[idx]
+        #     rho = sample_data.at[0, 'rho']
+        #     sample = {'name':file,
+        #               'alpha_max': alpha_max,
+        #               'score': max_score,
+        #               'rho': rho,
+        #               'genotype': genotype}
+        #     new_sample_ls.append(sample)
+        # alpha_max_df = pd.DataFrame(new_sample_ls)
+
+        # alpha_max_df.to_csv(
+        # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_scaled_max_score.csv')
+        # print("Dataframe saved.")
+
+        ## ADD EPHYS METRICS
+
+        ## REIMPORT
+        dataframe_name = 'mackey_glass_MEA-Mecp2_2022_dataset_conn2res_2023-04-24_scaled_max_score.csv'
+        df_subj = pd.read_csv(os.path.join(PROJ_DIR, 'dataframes', dataframe_name))
+
+        network_vars = ['rho', "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        ephys_vars = ['NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms']
+         
+        for v in network_vars + ephys_vars:
+            plotting.plot_perf_reg(df_subj, x=v, ylim=[0,1],
                 y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+
+        # plotting.plot_perf_reg(alpha_max_df, x='rho', y='alpha_max',ylim=[0.2,2],hue='genotype',
+        #             legend=False, savefig=True, title=f'alpha_max_vs_rho')
+        
+        # alpha_max_df['size'] = size
+        # plotting.plot_perf_reg(alpha_max_df, x='size', y='score',hue='genotype',
+        #             legend=False, savefig=True, title=f'max_score_vs_size')
+
+        # # plot genotype comparisons at each developmental age
+        # plotting.plot_performance_curve(df_subj, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
+        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
+        # **kwargs)
+
+        # # examine trends at peak performance (alpha = 1.0)
+        # alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
+
+        # # plot change in performance over development
+        # plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
+        # hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False, legend=False,
+        # title=f'{task_name}_{dataset}_performance_across_development_{m}',**kwargs)
+
+        # # linear regression model for performance as a function of network and electrophysiological variables
+        # network_vars = ['rho'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
+        # # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
+         
+        # for v in network_vars: #+ ephys_vars:
+        #     plotting.plot_perf_reg(df_subj, x=v, xlim=[0,15], ylim=[0,1],ticks=[0,1,5,10,15],
+        #         y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
 # %%

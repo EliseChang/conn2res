@@ -119,7 +119,7 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     # plt.close()
 
 
-def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squared", hue=None, hue_order=None, palette=None, ylim=None, chance_perf=0.5,
+def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel=None, hue=None, hue_order=None, style=None, style_order=None, palette=None, ylim=None, chance_perf=None,
                            xlim=None, legend=True,ticks=None, norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
 
     sns.set(style="ticks", font_scale=1.0)
@@ -143,6 +143,8 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squar
     plot = sns.lineplot(data=df, x=x, y=y,
                     hue=hue,
                     hue_order=hue_order,
+                    style=style,
+                    style_order=style_order, 
                     palette=palette,
                     markers=True,
                     legend=legend,
@@ -154,8 +156,10 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squar
     if chance_perf is not None:
         plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
     plot.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
-    l = plt.legend(title=hue, loc='best', fontsize=22, frameon=False)
-    plt.setp(l.get_title(), fontsize='22')
+    if legend:
+        l = plt.legend(title=hue, loc='best', fontsize=22, frameon=False)
+        plt.setp(l.get_title(), fontsize='22')
+
     plt.xlabel(x, fontsize=30)
     plt.ylabel(ylabel, fontsize=30)
     if ticks is not None: plt.xticks(ticks, fontsize=24)
@@ -172,8 +176,8 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel="R squar
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, ticks=None, ylim=None, xlabel=None,
-                  hue=None, hue_order=None, size=None,size_order=None,palette=None,
+def plot_perf_reg(df, x, title=None, y='score', ylabel=None, xlim=None, ticks=None, ylim=None, xlabel=None,
+                  hue=None, hue_order=None, size=None,size_order=None,style=None,palette=None,legend=True,
     chance_perf=0.5, figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
 
     fig = plt.figure(figsize=figsize)
@@ -185,18 +189,21 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, t
                 hue_order = ["WT", "HE", "KO"]
 
     if size == 'age': size_order=kwargs.get('ages')
+    if style == 'group': markers = {"stimulation": "s", "control": "X"}
+    else: markers=True
     g = sns.scatterplot(data=df,
             x=x,
             y=y,
-            legend=True,
+            legend=legend,
             hue=hue,
             hue_order=hue_order,
             size=size,
             sizes=(50, 750),
             size_order=size_order,
-            markers=True,
+            style=style,
+            markers=markers,
             palette=palette,
-            s=120)
+            s=150)
             #,ci=None)
 
     if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
@@ -206,12 +213,14 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel='R squared', xlim=None, t
     else: plt.xticks(fontsize=26)
     if xlabel is not None: plt.xlabel(xlabel,fontsize=30)
     else: plt.xlabel(x,fontsize=30)
-    plt.ylabel(ylabel,fontsize=30)
+    if ylabel is not None: plt.ylabel(ylabel,fontsize=30)
+    else: plt.ylabel(x,fontsize=30)
 
-    if size is not None:
-        l = plt.legend(fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
-    else: l = plt.legend(title=hue, fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
-    plt.setp(l.get_title(), fontsize='22')
+    if legend:
+        if size is not None:
+            l = plt.legend(fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
+        else: l = plt.legend(title=hue, title_fontsize='22',fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
+        plt.setp(l.get_title(), fontsize='22')
 
     # if hue=='genotype':
     #     l.legendHandles[1].set_sizes([50])
@@ -395,9 +404,9 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
     plt.close(fig)
     # plt.show(block=block)
 
-def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None, xticklabs=None,
-            title=None, hue=None, hue_order=None, palette=None, orient='v', \
-            width=0.5, linewidth=1, xlim=None, ylim=None, chance_perf=None,
+def boxplot(x, y, df, ylab=None, order=None, by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None, xticklabs=None,
+            title=None, hue=None, hue_order=None, palette=None, xlabel=None,
+            width=0.5, linewidth=1.5, xlim=None, ylim=None, chance_perf=None,
             legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
 
     fig = plt.figure(figsize=figsize)
@@ -435,14 +444,14 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
             if ylim is not None: plt.ylim(ylim)
             if xlim is not None: plt.xlim(xlim)
 
-            plt.xlabel(x, fontsize=28)
-            plt.ylabel(ylabel, fontsize=28)
+            plt.xlabel(xlabel, fontsize=28)
+            plt.ylabel(ylab, fontsize=28)
 
             if xticks is not None: plt.xticks(xticks, fontsize=24,)
-            else: plt.xticks(fontsize=24)
+            else: plt.xticks(fontsize=22)
             if xticklabs is not None: plot.set_xticklabels(xticklabs)
             if yticks is not None: plt.yticks(yticks, fontsize=24)
-            else: plt.yticks(fontsize=24)
+            else: plt.yticks(fontsize=22)
 
             if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
             if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
@@ -452,39 +461,57 @@ def boxplot(x, y, df, ylabel="R squared", order=None, by_age=False, ages=None,re
 
     else:
         ax = plt.subplot(1, 1, 1)
-        plot = sns.boxplot(x=x, y=y,
-                        data=df,
-                        order=order,
-                        showmeans=True,
-                        meanprops={"marker":"+",
-                                "markerfacecolor":"white", 
-                                "markeredgecolor":"white",
-                                "markersize":"12"},
-                        palette=palette,
+
+        if hue == x: dodge=False
+        else: dodge=0.2
+
+        pp = sns.pointplot(data=df,x=x, y=y,
                         hue=hue,
                         hue_order=hue_order,
-                        orient=orient,
-                        width=width,
-                        linewidth=linewidth,
+                        join=False,
+                        errorbar='sd',
+                        markers="d",
+                        order=order,
+                        color="black",
+                        orient='v',
+                        dodge=dodge,
+                        errwidth=linewidth,
+                        scale=2,
+                        capsize=0.1,
                         ax=ax,
                         **kwargs
                         )
-        if legend: ax.legend(fontsize=22, title=hue, frameon=False, ncol=1, loc='best')
-        else: plot.legend_.remove()
+
+        sp = sns.stripplot(data=df,x=x, y=y,
+                hue=hue,
+                hue_order=hue_order,
+                palette=palette,
+                dodge=dodge,
+                zorder=0,
+                s=8,
+                ax=ax,
+                **kwargs
+                )
+        
+        if legend: ax.legend(fontsize=22, title=hue, title_fontsize=22, frameon=False, ncol=1, loc='center left', bbox_to_anchor=(1, 0.5))
+        else: sp.legend_.remove()
 
         if ylim is not None: plt.ylim(ylim)
         if xlim is not None: plt.xlim(xlim)
 
-        plt.xlabel(x, fontsize=28)
-        plt.ylabel(ylabel, fontsize=28)
+        plt.xlabel(xlabel, fontsize=28)
+        plt.ylabel(ylab, fontsize=28)
 
         if xticks is not None: plt.xticks(xticks, fontsize=24)
-        else: plt.xticks(fontsize=24)
+        else:
+            locs,_= plt.xticks()
+            plt.xticks(fontsize=22)
+        if xticklabs is not None: plt.xticks(locs,labels=xticklabs,fontsize=24)
         if yticks is not None: plt.yticks(yticks, fontsize=24)
-        else: plt.yticks(fontsize=24)
+        else: plt.yticks(fontsize=22)
 
-        if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
-        if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+        if y=='percentage_change': pp.axhline(0,color='r',linestyle='--',linewidth='2.0')
+        if chance_perf is not None: pp.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
         sns.despine()
 
     # set tight layout in case there are different subplots

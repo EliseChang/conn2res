@@ -291,11 +291,15 @@ def create_classification_dataset(task, input_shape, noise, washout, stim_durati
         # TODO: ensure even number of timesteps for biphasic signal
 
         if input_shape == "biphasic":
+            
+            stim = np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))) * input_sf
+        
+        elif input_shape == "monophasic":
             stim = np.ones(stim_duration,dtype=int) * input_sf
-            # stim = np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))) * input_sf
-            pre_stim_background = np.ones(washout,dtype=int)
-            post_stim_bacgkround =  np.ones(post_stim,dtype=int)
-            x = np.concatenate((pre_stim_background,stim,post_stim_bacgkround))[:,np.newaxis]
+            
+        pre_stim_background = np.ones(washout,dtype=int)
+        post_stim_bacgkround =  np.ones(post_stim,dtype=int)
+        x = np.concatenate((pre_stim_background,stim,post_stim_bacgkround))[:,np.newaxis]
             
         # y = np.array([np.repeat(trial,n_timesteps)[:,np.newaxis] for trial in sequence])
     # elif task == "temporal_classification_v0":

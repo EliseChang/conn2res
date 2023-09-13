@@ -25,7 +25,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 
 # Metaparameters
 import_dataframe = 0
-dataframe_name = '' # 'mackey_glass_MEA-Mecp2_2020_0.95_thr_50_runs_average.csv' # name of previously generated .csv dataframe to import for plotting
+dataframe_name = '' # name of previously generated .csv dataframe to import for plotting
 reduce = 0
 plot_diagnostics = 0
 plot_perf_curves = 1
@@ -34,7 +34,7 @@ plot_perf_curves = 1
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dataset = "MEA-Mecp2_2022_dataset_conn2res"
 CONN_DATA = os.path.join(PROJ_DIR, 'data', 'connectivity')
-# NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_28Dec2022.csv')
+# NET_DATA = os.path.join(PROJ_DIR, 'data', 'network_metrics', 'MEA-Mecp2_2022_16Jul2023.csv')
 # EPHYS_DATA = os.path.join(PROJ_DIR, 'data', 'ephys_metrics','MEA-Mecp2_2022_23Dec2022.csv')
 METADATA = f"{dataset}.xlsx"
 
@@ -43,7 +43,7 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-            sheet_name="fully_connected", engine="openpyxl")
+            sheet_name="fully_connected_mature", engine="openpyxl")
 names = metadata["File name"]
 ages = metadata["Age"]
 genotypes = metadata["Genotype"]
@@ -76,8 +76,7 @@ idx_washout = 200
 
 # Metrics to evaluate the regression model for RC output
 metrics = ['score'] # , 'mse', 'nrmse'
-alphas = np.concatenate((np.linspace(0.2, 1.2, num=6), np.arange(
-    2.0, 10.0, 1.0))) # np.linspace(0.2, 3.0, num=15)
+alphas = np.linspace(0.2, 2.0, num=10)
 
 # %% Main
 
@@ -100,7 +99,7 @@ for idx,file in names.iteritems():
     try:
         conn.scale_and_normalize()
     except ValueError:
-        # input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
+        input("Cannot compute largest eigenvalue. Check connectivity matrix. Press Enter to continue.")
         continue
 
     # generate and fetch data
@@ -119,7 +118,7 @@ for idx,file in names.iteritems():
     for alpha in alphas:
         if 0.2 <= alpha < 0.8:
             regime = 'stable'
-        elif 0.8 <= alpha < 1.2:
+        elif 0.8 <= alpha < 1.4:
             regime = 'critical'
         else:
             regime = 'chaotic'
@@ -132,7 +131,7 @@ for idx,file in names.iteritems():
         alpha_dict = {
             'name': file,
             'age': ages[idx],
-            'genotype': genotypes[idx],
+            'Genotype': genotypes[idx],
             'rho': conn.spectral_radius,
             'alpha': np.round(alpha, 3),
             'regime': regime}
@@ -152,8 +151,8 @@ for idx,file in names.iteritems():
         #     output_nodes = conn.get_nodes('random', n_nodes=n_output_nodes, nodes_without=input_nodes)
 
             # create input connectivity matrix
-            # w_in = np.random.normal(scale=1e-3, size=(n_features, conn.n_nodes, n_timesteps))
-            w_in = np.zeros(shape=(n_features, conn.n_nodes, n_timesteps))
+            w_in = np.random.normal(scale=1e-3, size=(n_features, conn.n_nodes, n_timesteps))
+            # w_in = np.zeros(shape=(n_features, conn.n_nodes, n_timesteps))
             w_in[:,input_nodes,:] = np.ones(
                 n_features, dtype=int)
         
@@ -212,11 +211,11 @@ for idx,file in names.iteritems():
                                             savefig=True, fname=f'{task_name}_diagnostics_{file}_a{alpha}')
         
         for m in metrics: alpha_dict[m] = np.mean(scores[m])
-        subj_ls.append(alpha_dict) # | ephys_data.iloc[idx].to_dict() | network_data.iloc[idx].to_dict())
+        subj_ls.append(alpha_dict) # | network_data.iloc[idx].to_dict()) # | ephys_data.iloc[idx].to_dict() 
 
 df_subj = pd.DataFrame(subj_ls)
 df_subj.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_tau_30_horizon_30csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_horizon_{horizon}_tau_{tau}_noise.csv')
 print("Dataframe saved.")
 
 #%% Import dataframe
@@ -227,60 +226,48 @@ if import_dataframe:
 
 if plot_perf_curves:
     figsize=(19.2, 9.43)
-    regimes = ['stable','critical','chaotic']
-    kwargs = {'ages': np.sort(ages.unique()),
-    'genotypes': genotypes.unique()}
-    # add_lines = ["MEC_220425_5C_DIV07","MEC_220425_5C_DIV14","MEC_220425_6E_DIV21","MEC_220425_6E_DIV35","MEC_220425_7B_DIV14","MEC_220425_5B_DIV14",
-    # "MEC_220425_3E_DIV21","MEC_220425_7B_DIV21","MEC_220425_3B_DIV14","MEC_220425_6A_DIV07","MEC_220425_2A_DIV28","MEC_220425_2B_DIV28","MEC_220425_3F_DIV28",
-    # "MEC_220425_4A_DIV28"]
-    # df_subset=df_subj[df_subj.name.isin(add_lines)]
 
     # plot performance over runs for each sample at each alpha value
     for m in metrics:
 
-        # # Plot unscaled performance
-        # plotting.plot_perf_reg(df_subj, x='rho',ylim=[0,1],
-        #                 hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
-        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
+        # Plot unscaled performance
+        plotting.plot_perf_reg(df_subj, x='rho',ylim=[0,1],
+                        hue="genotype", hue_order=["WT", "HE", "KO"], size='age',
+        figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_{m}', **kwargs)
 
-        # plotting.boxplot(df=df_subj, x='genotype', y=m, ylim=[0,1],order=["WT", "HE", "KO"], hue='genotype', legend=True,ylab="R squared",
-        #                 figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
+        plotting.boxplot(df=df_subj, x='genotype', y=m, ylim=[0,1],order=["WT", "HE", "KO"], hue='genotype', legend=True,ylab="R squared",
+                        figsize=(4.5, 8), width=1.0, savefig=True, title=f'{task_name}_{dataset}_unscaled_performance_genotype_comparison', **kwargs)
         
-        # network_vars = ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"] # rho
-        # ephys_vars = ['NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms']
+        network_vars = ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"] # rho
+        ephys_vars = ['NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms']
          
-        # for v in network_vars: # ephys_vars:
-        #     plotting.plot_perf_reg(df_subj, x=v, ylim=[0,1],
-        #         y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+        for v in network_vars: # ephys_vars:
+            plotting.plot_perf_reg(df_subj, x=v, ylim=[0,1],
+                y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
+        df_connected = df_subj[df_subj.connectedness == 1].reset_index()
 
+        plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="Genotype", hue_order=["WT", "HE", "KO"],legend=True,
+         figsize=(12,8), savefig=True, title=f'{task_name}_{dataset}_performance_curve_horizon_{horizon}_tau_{tau}',format=['png','svg'],**kwargs)
+        df_mature = df_connected[df_connected.age > 7].reset_index()
+        
 
-        plotting.plot_performance_curve(df_subj, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue="genotype", hue_order=["WT", "HE", "KO"],legend=True,
-         figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}',**kwargs)
-
-
-        # plot genotype comparisons for dynamical regimes
-        regime_data_ls = []
-
+        df_regrouped = df_subj.groupby(['name','regime','Genotype']).mean().reset_index()
+        genotypes = ["WT", "HE", "KO"]
+        df_regrouped['Genotype'] = pd.Categorical(df_regrouped['Genotype'], genotypes)
+        df_regrouped['Age'] = df_regrouped['age'].astype('category')
+        regimes = ['stable','critical','chaotic']
+        df_regrouped['Regime'] = pd.Categorical(df_regrouped['regime'], regimes)
+        df_regrouped.sort_values(by='Genotype',inplace=True)
         for regime in regimes:
-            regime_data = df_subj[df_subj['regime'] == regime].reset_index().groupby('name').mean()
-            # regime_data['genotype'] = genotypes
-            regime_data['regime'] = regime
+            df_regime = df_regrouped[df_regrouped.Regime == regime]
 
-            # plotting.plot_perf_reg(regime_data, x='density_full', y=m, xlabel="Density",hue='genotype', figsize=(9.43, 9.43),
-            # size='age',savefig=True, title=regime,**kwargs)
+            plotting.boxplot(df=df_regime, x='Genotype', order=genotypes, y=m, ylim=[0,1]
+                            legend=False, xticklabs=["WT","HET","KO"],
+            hue="Genotype", hue_order=["WT", "HE", "KO"],marker="Age", figsize=(8, 8),format=['png','svg'],
+            savefig=True, title=f'{task_name}_{dataset}_{horizon}_noise_{regime}', **kwargs)
 
-            regime_data_ls.append(regime_data)
-
-        df_regrouped = pd.concat(regime_data_ls)
-
-        df_regrouped.to_csv(
-        f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_regrouped_by_regime.csv')
-        print("Dataframe saved.")
-
-        plotting.boxplot(df=df_subj, x='regime', hue='genotype', hue_order=["WT", "HE", "KO"],
-                        y=m,ylab="R squared", order=["stable", "critical", "chaotic"],legend=False,
-                        figsize=(8, 8), savefig=True,title=f'{task_name}_{dataset}_genotype_comparison_by_regime', **kwargs)
-
+                                                              
+        # Find alpha value at which performance is max
         # new_sample_ls = []
         # for idx,file in names.iteritems():
         #     sample_data = df_subj[df_subj['name'] == file].reset_index()
@@ -307,46 +294,3 @@ if plot_perf_curves:
 
         # plotting.plot_perf_reg(alpha_max_df, x='rho', size='age',xlabel="rho",
         #     y='alpha_max',hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_alphamax_vs_rho')
-
-
-        ## ADD EPHYS METRICS
-
-        # ## REIMPORT
-        # dataframe_name = 'mackey_glass_MEA-Mecp2_2022_dataset_conn2res_2023-04-24_scaled_max_score.csv'
-        # df_subj = pd.read_csv(os.path.join(PROJ_DIR, 'dataframes', dataframe_name))
-
-        # network_vars = ['rho', "density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # ephys_vars = ['NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms']
-         
-        # for v in network_vars + ephys_vars:
-        #     plotting.plot_perf_reg(df_subj, x=v, ylim=[0,1],
-        #         y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
-
-        # plotting.plot_perf_reg(alpha_max_df, x='rho', y='alpha_max',ylim=[0.2,2],hue='genotype',
-        #             legend=False, savefig=True, title=f'alpha_max_vs_rho')
-        
-        # alpha_max_df['size'] = size
-        # plotting.plot_perf_reg(alpha_max_df, x='size', y='score',hue='genotype',
-        #             legend=False, savefig=True, title=f'max_score_vs_size')
-
-        # # plot genotype comparisons at each developmental age
-        # plotting.plot_performance_curve(df_subj, by_age=True, y=m, ylim=[0,1], xlim=[min(alphas),max(alphas)], hue='genotype', hue_order=["WT", "HE", "KO"],
-        # figsize=figsize, savefig=True, title=f'{task_name}_{dataset}_performance_{m}_across_development_{m}',
-        # **kwargs)
-
-        # # examine trends at peak performance (alpha = 1.0)
-        # alpha_data = df_subj[df_subj['alpha'] == 1.0].reset_index()
-
-        # # plot change in performance over development
-        # plotting.plot_performance_curve(alpha_data, x='age', y=m, ylim=[0,1], xlim=[min(ages),max(ages)], ticks=ages.unique(),
-        # hue='genotype', hue_order=["WT", "HE", "KO"], figsize=figsize, savefig=True, block=False, legend=False,
-        # title=f'{task_name}_{dataset}_performance_across_development_{m}',**kwargs)
-
-        # # linear regression model for performance as a function of network and electrophysiological variables
-        # network_vars = ['rho'] # ["density_full", "net_size", "n_mod","small_world_sigma","small_world_omega"]
-        # # ephys_vars = ['meanspikes', 'FRmean','NBurstRate', 'meanNumChansInvolvedInNbursts','meanNBstLengthS', 'meanISIWithinNbursts_ms', 'CVofINBI']
-         
-        # for v in network_vars: #+ ephys_vars:
-        #     plotting.plot_perf_reg(df_subj, x=v, xlim=[0,15], ylim=[0,1],ticks=[0,1,5,10,15],
-        #         y=m,hue='genotype', legend=False, savefig=True, title=f'{task_name}_{dataset}_{m}_perf_vs_{v}')
-# %%

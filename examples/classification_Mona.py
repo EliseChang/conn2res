@@ -25,14 +25,15 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # %% Set global variables
 
 # Metaparameters
-import_dataframe = 0
+import_dataframe = 1
 dataframe_name = ''
 plot_diagnostics = 0
 plot_perf_curves = 1
 threshold = 0
 
-state_var = 'spike_rates'
-window = '20-100'
+state_var = 'spike_counts'
+windows =  ['3-20','20-100','100-180','180-260','260-340','340-420','420-500']
+df_sample_ls = []  # initialise list to contain dictionaries for each alpha trial
 
 # Paths and spreadsheets
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,14 +46,14 @@ today = date.today()
 
 # Import metadata
 metadata = pd.read_excel(os.path.join(PROJ_DIR, 'data', METADATA),
-                         sheet_name='OWT', engine="openpyxl")
+                    sheet_name='OWT', engine="openpyxl")
 names = metadata["Pair name"]
 sample_ids = metadata["Sample ID"]
 baseline_recs = metadata["Baseline"]
 pattern_0_recs = metadata["Pattern 0"]
 pattern_1_recs = metadata["Pattern 1"]
 ages = metadata["Age"]
-genotypes = metadata["Genotype/Treat"]
+genotypes = metadata["Treatment"] #["Genotype/Treat"]
 protocol = metadata["Stimulation amplitude"]
 
 # Get trial-based dataset for task
@@ -86,9 +87,7 @@ n_run = 100 # random training-testing split
 fig_num = 1
 figsize = (19.2, 9.43)
 
-# %% Main
-
-df_sample_ls = []  # initialise list to contain dictionaries for each alpha trial
+    # %% Main
 
 # define model for RC ouput
 model = RidgeClassifier(alpha=1e-8, fit_intercept=True)
@@ -166,6 +165,7 @@ for idx,file in names.items():
         df_stim['Protocol'] = protocol[idx]
         df_stim['run'] = run
         df_stim['group'] = "stimulation"
+        df_stim['window'] = window
         # df_stim['io_dist'] = io_dist
         df_sample_ls.append(df_stim)
 
@@ -192,6 +192,7 @@ for idx,file in names.items():
         df_control['Protocol'] = protocol[idx]
         df_control['run'] = run
         df_control['group'] = "control"
+        df_control['window'] = window
         # df_stim['io_dist'] = io_dist
         df_sample_ls.append(df_control)
 
@@ -216,9 +217,10 @@ for idx,file in names.items():
 
         fig_num += 1
 
-df_sample = pd.concat(df_sample_ls)
+    df_sample = pd.concat(df_sample_ls)
+
 df_sample.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_{window}.csv')
+    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_all_windows.csv')
 print("Dataframe saved.")
 
 # %% Import dataframe
@@ -230,13 +232,13 @@ if import_dataframe:
 
 if plot_perf_curves:
         
-    # Plot classification accuracy against control for each sample
-    for idx,sample in sample_ids.items():
+    # # Plot classification accuracy against control for each sample
+    # for idx,sample in sample_ids.items():
 
-        sample_data = df_sample[df_sample['sample'] == sample].reset_index()
+    #     sample_data = df_sample[df_sample['sample'] == sample].reset_index()
 
-        plotting.boxplot('group', 'score', sample_data, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], xticklabs=["Stimulation", "Control"], ylab="Classification accuracy", chance_perf=0.5,
-                            title=f'{names[idx]}_{state_var}_classification_accuracy.png')
+    #     plotting.boxplot('group', 'score', sample_data, width=0.5, figsize=(4, 9), savefig=True, ylim=[0,1], xticklabs=["Stimulation", "Control"], ylab="Classification accuracy", chance_perf=0.5,
+    #                         title=f'{names[idx]}_{state_var}_classification_accuracy.png')
         
     #     # stim_data = sample_data[sample_data['group'] == 'stimulation'].reset_index()
         
@@ -244,68 +246,77 @@ if plot_perf_curves:
         #                        xlabel='Mean input-output distance',savefig=True,
         #                        title=f'{names[idx]}_{state_var}_input-output_dist.png')
         
-    # Plot classification accuracy against control for all samples
-    df_temp = df_sample.groupby('name').mean().reset_index()
-    df_temp['group'] = np.tile(["stimulation", "control"], len(sample_ids))
-    genotypes_col = genotypes.repeat(2).reset_index() # label = 'Genotype'
-    # treatments_col = treatment.repeat(2).reset_index()
-    protocol_col = protocol.repeat(2).reset_index() # label = 'Stimulation amplitude'
-    df_regrouped = pd.concat([df_temp,genotypes_col,protocol_col],axis=1) # treatments_col
+    # # Plot classification accuracy against control for all samples
+    # df_regrouped = df_sample.groupby(['name', 'window','Group']).mean().reset_index()
 
-    # df_regrouped.to_csv(
-    # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_regrouped.csv')
-    # print("Dataframe saved.")
+    # # df_regrouped.to_csv(
+    # # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_regrouped.csv')
+    # # print("Dataframe saved.")
 
-    # Temporary: set a different default palette for non-genotype comparisons to avoid confusion
+    # # Temporary: set a different default palette for non-genotype comparisons to avoid confusion
     import seaborn as sns
     cp = sns.color_palette()
-    # # WT untreated samples only
-    # df_untreated = df_regrouped[df_regrouped['Treatment'] == 'Untreated']
-    plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(8, 8), savefig=True, ylim=[0,1], hue='group', hue_order=["stimulation","control"],
+    # # # WT untreated samples only
+    # # df_untreated = df_regrouped[df_regrouped['Treatment'] == 'Untreated']
+    # df_window = df_regrouped[df_regrouped['window'] == '20-100']
+    # df_window.to_csv(
+    # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_20-100_mean_scores_short_form.csv')
+    # print("Dataframe saved.")
+    df_sample['Group'] = pd.Categorical(df_sample['Group'],['stimulation','control'])
+    df_sample.sort_values(by='Group',inplace=True)
+
+    plotting.boxplot(x='Group', order=["stimulation","control"], y='score', df=df_sample, figsize=(8, 8), savefig=True,
+                     hue='age', marker='amplitude',#hue_order=["57","63"],
                      xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5, palette=cp,
-                            title=f'all_samples_{state_var}_{window}_classification_accuracy')
+                            title=f'all_samples_{state_var}_20-100_classification_accuracy',
+                            format=['png','svg'])
     
 
     # Group by genotype or treatment
     # # Age
-    # # plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(6, 8), savefig=True, ylim=[0,1], hue='age',
-    # #                     xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
-    # #                             title=f'all_samples_{state_var}_classification_accuracy_by_age.png')
+    # plotting.boxplot(x='age', y='score', df=df_sample, figsize=(8, 8), savefig=True, ylim=[0,1], hue='age',marker='amplitude',
+    #                     xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
+    #                             title=f'all_samples_{state_var}_classification_accuracy_by_age.png')
 
     # # Genotype
     # plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(8, 8), savefig=True, ylim=[0,1.05], hue='Genotype',hue_order=["WT","HET","KO"],
     #                  xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
     #                         title=f'all_samples_{state_var}_classification_accuracy_by_genotype.png')
     
-    # # # Treatment
-    # # plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(8, 8), savefig=True, ylim=[0,1.1], hue='Treatment',hue_order=["Untreated", "Gabazine"],
-    # #                     xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
-    # #                             title=f'all_samples_{state_var}_classification_accuracy_by_treatment.png')
+    # # Treatment
+    # plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(8, 8), savefig=True, ylim=[0,1.1], hue='Treatment',hue_order=["Untreated", "GBZ"],
+    #                     xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
+    #                             title=f'all_samples_{state_var}_{window}_classification_accuracy_by_treatment.png')
     
     # # Stimulation protocol
     # plotting.boxplot(x='group', y='score', df=df_regrouped, figsize=(8, 8), savefig=True, ylim=[0,1.1], hue='Stimulation amplitude',hue_order=['1UA','3UA','4UA','5UA','6UA'],
     #                     xticklabs=["Stimulation", "Control"],ylab="Classification accuracy", chance_perf=0.5,
-    #                             title=f'all_samples_{state_var}_classification_accuracy_by_protocol.png')
+    #                             title=f'all_samples_{state_var}_{window}_classification_accuracy_by_protocol.png')
     
     # %% Calculate sample mean scores
 
-    # Plot coefficient of variation
-    df_mean = df_sample.groupby('name').mean()
-    mean_score = df_mean['score']
-    std_score = df_sample.groupby('name').std()['score']
-    df_mean['cv'] = std_score / mean_score
-    df_mean['group'] = np.tile(["stimulation", "control"], len(sample_ids))
+    # # Plot coefficient of variation
+    # df_mean = df_sample.groupby(['name','window','Group']).mean().reset_index()
+    # # mean_score = df_mean['score']
+    # # std_score = df_sample.groupby('name').std()['score']
+    # # df_mean['cv'] = std_score / mean_score
+    # # df_mean['group'] = np.tile(["stimulation", "control"], len(sample_ids))
 
-    df_mean.to_csv(
-    f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_mean_scores.csv')
-    print("Dataframe saved.")
+    # df_mean.to_csv(
+    # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_all_windows_mean_scores.csv')
+    # print("Dataframe saved.")
 
-    # plotting.plot_perf_reg(df=df_mean,x='cv',y='score',hue='sample',style='group',legend=False,figsize=(8,8),
+    # df_window = df_mean[df_mean['window'] == '20-100']
+    # df_window.to_csv(
+    # f'{PROJ_DIR}/dataframes/{task_name}_{dataset}_{today}_{state_var}_20-100_mean_scores.csv')
+    # print("Dataframe saved.")
+
+    # plotting.plot_perf_reg(df=df_mean,x='cv',y='score',style='group',legend=False,figsize=(8,8),
     #                        ylabel='Mean classification score',xlabel='CV across training-testing runs',
     #                        title=f'all_samples_{state_var}_classification_accuracy_CV',savefig=True)
-    
-#     plotting.boxplot(df=df_sample,x='window',y='score',hue='group',savefig=True, xlabel='Classification window timing (ms)',
-# xticklabs=['3-20','20-100','100-180','180-260'],ylab='Classification accuracy',title="Classification accuracy ~ window timing")
 
-## %%
+# # Plot classification accuracy across windows
+# plotting.boxplot(df=df_mean,x='window',y='score',hue='age',xticklabs=windows,marker='amplitude',
+#                  savefig=True, xlabel='Classification window timing (ms)',ylab='Classification accuracy',
+#                  title=f"Classification accuracy ~ window timing ({state_var})")
 # %%

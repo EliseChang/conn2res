@@ -13,6 +13,7 @@ from numpy.linalg import (pinv, matrix_rank)
 from scipy.linalg import eigh
 from bct.algorithms.clustering import get_components
 from bct.algorithms.distance import distance_bin
+from bct.algorithms.reference import randmio_und_connected
 from .iodata import (load_file, inv_trans_sample)
 from .coding import get_modules
 
@@ -148,6 +149,12 @@ class Conn:
 
             # copy weights to lower diagonal
             self.w = make_symmetric(self.w, copy_lower=False)
+
+    def rewire(self, itr=50, mode='random', lattice=False):
+        """
+        Rewires the connectivity matrix using BCT function (Agoston's version)
+        """
+        self.w,_ = randmio_und_connected(self.w, itr, mode=mode, lattice=lattice)
 
     def subset_nodes(self, node_set='all', idx_node=None, **kwargs):
         """

@@ -296,6 +296,17 @@ def create_classification_dataset(task, input_shape, noise, washout, stim_durati
         
         elif input_shape == "monophasic":
             stim = np.ones(stim_duration,dtype=int) * input_sf
+
+        elif input_shape == "complex": # an example temporal sequence for examining raster plots
+            stim = np.concatenate((np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))),
+                                  np.zeros(stim_duration*2,dtype=int),
+                                  np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))),
+                                  np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))),
+                                  np.zeros(stim_duration*2,dtype=int),
+                                  np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2)))),
+                                  np.concatenate((np.ones(int(stim_duration/2)),-np.ones(int(stim_duration/2))))
+                                                 ))
+            stim *= input_sf
             
         pre_stim_background = np.ones(washout,dtype=int)
         post_stim_bacgkround =  np.ones(post_stim,dtype=int)

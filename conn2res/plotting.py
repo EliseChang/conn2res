@@ -6,20 +6,35 @@ Plotting functions
 """
 import os
 import seaborn as sns
+import seaborn.objects as so
+from seaborn import axes_style
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from statannotations.Annotator import Annotator
+import scipy.stats
+import statistics
 import numpy as np
+import pandas as pd
 from numpy.linalg import svd, norm
 import math
 from datetime import date
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import BaggingRegressor
 
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 today = date.today()
 FIG_DIR = os.path.join(PROJ_DIR, 'figs', today.strftime("%d%b%Y"))
 if not os.path.isdir(FIG_DIR):
     os.makedirs(FIG_DIR)
+dpi = 300
+sns.set(font="Arial", style='ticks', font_scale=1.0)
 
+
+
+# age_marker_dict = {"21": "o",
+#                    "28": "s",
+#                    "35": "v"}
 class PCA:
     """
     Class that represents a simplified PCA object
@@ -83,6 +98,94 @@ class PCA:
         # transform data into principal components
         return self.transform(data, **kwargs)
 
+def get_iqr(x):
+    min = np.quantile(x, 0.25)
+    max = np.quantile(x, 0.75)
+    return (min, max)
+
+def get_confints(df, indexvar, withinvars, x, y, hue, ci_lims):
+    x_cats = pd.Categorical(np.unique(df[x]))
+    x_n = len(x_cats)
+    groups = pd.unique(df[hue])
+    hue_n = len(groups)
+    confint = np.zeros((x_n, hue_n, 2))
+
+    means = df.groupby(withinvars + [hue]).mean().reset_index()
+    
+    for i, group in enumerate(groups):
+        group_df = df[df[hue] == group]
+        group_ci = ci_within(group_df, indexvar, withinvars, y)
+        for j, cat in enumerate(x_cats):
+            mean = means[(means[x] == cat) & (means[hue] == group)][y].values[0]
+            ci = group_ci[group_ci[x] == cat]['sem'].values[0]
+            min = mean - ci
+            max = mean + ci
+            if ci_lims is not None:
+                if min < ci_lims[0]: min = ci_lims[0]
+                if max > ci_lims[1]: max = ci_lims[1]
+            confint[j, i, 0] = min
+            confint[j, i, 1] = max
+
+    return confint
+
+def ci_within(df, indexvar, withinvars, measvar, confint=0.95,
+                      copy=True):
+    
+    """ Compute CI / SEM correction factor
+    Morey 2008, Cousinaueu 2005, Loftus & Masson, 1994
+    Also see R-cookbook http://goo.gl/QdwJl
+    Note. This functions helps to generate appropriate confidence
+    intervals for repeated measure designs.
+    Standard confidence intervals are are computed on normalized data
+    and a correction factor is applied that prevents insanely small values.
+    df : instance of pandas.DataFrame
+        The data frame objetct.
+    indexvar : str
+        The column name of of the identifier variable that representing
+        subjects or repeated measures
+    withinvars : str | list of str
+        The column names of the categorial data identifying random effects
+    measvar : str
+        The column name of the response measure
+    confint : float
+        The confidence interval
+    copy : bool
+        Whether to copy the data frame or not.
+    """
+    if copy:
+        df = df.copy()
+
+    # Apply Cousinaueu's method:
+    # compute grand mean
+    mean_ = df[measvar].mean()
+
+    # compute subject means
+    subj_means = df.groupby(indexvar)[measvar].mean().values
+    for subj, smean_ in zip(df[indexvar].unique(), subj_means):
+        # center
+        df[measvar][df[indexvar] == subj] -= smean_
+        # add grand average
+        df[measvar][df[indexvar] == subj] += mean_
+
+    def sem(x):
+        return x.std() / np.sqrt(len(x))
+
+    def ci(x):
+        se = sem(x)
+        return se * scipy.stats.t.interval(confint, len(x) - 1)[1]
+
+    aggfuncs = [np.mean, np.std, sem, ci]
+    out = df.groupby(withinvars)[measvar].agg(aggfuncs)
+    out.reset_index(inplace=True)
+    # # compute & apply correction factor
+    # n_within = np.prod([len(df[k].unique()) for k in withinvars],
+    #                    dtype= df[measvar].dtype)
+    # cf = np.sqrt(n_within / (n_within - 1))
+    # for k in ['sem', 'std', 'ci']:
+    #     out[k] *= cf
+
+    return out
+
 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
     new_cmap = colors.LinearSegmentedColormap.from_list(
@@ -114,23 +217,22 @@ def plot_task(x, y, title, num=1, figsize=(12, 10), savefig=False, show=False, b
     sns.despine()
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}_io.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+                    transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
     # plt.close()
 
 
 def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel=None, hue=None, hue_order=None, style=None, style_order=None, palette=None, ylim=None, chance_perf=None,
-                           xlim=None, legend=True,ticks=None, norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, show=False, block=True, **kwargs):
+                           xlim=None, legend=True,xticks=None, yticks=None,norm=False, norm_var=None, figsize=(19.2, 9.43), savefig=False, format=['png'], show=False, block=True, **kwargs):
 
-    sns.set(style="ticks", font_scale=1.0)
     fig = plt.figure(figsize=figsize)
 
     if palette is None and hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-        if hue_order is None and "WT" in list(np.unique(df[hue])):
-            hue_order = ["WT", "HE", "KO"]
+        # if hue_order is None and "WT" in list(np.unique(df[hue])):
+        #     hue_order = ["WT", "HET", "KO"]
 
     if norm:
         df[y] = df[y] / df[norm_var]
@@ -148,6 +250,7 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel=None, hu
                     palette=palette,
                     markers=True,
                     legend=legend,
+                    linewidth=2,
                     ax=ax)
 
     if ylim is not None: plt.ylim(ylim)
@@ -155,32 +258,34 @@ def plot_performance_curve(df, title=None, x='alpha', y='score', ylabel=None, hu
 
     if chance_perf is not None:
         plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-    plot.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
+    if x == 'alpha': plot.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
     if legend:
-        l = plt.legend(title=hue, loc='best', fontsize=22, frameon=False)
-        plt.setp(l.get_title(), fontsize='22')
+        l = plt.legend(title=hue, loc='upper right', fontsize=32, frameon=False)
+        plt.setp(l.get_title(), fontsize='40')
 
-    plt.xlabel(x, fontsize=30)
-    plt.ylabel(ylabel, fontsize=30)
-    if ticks is not None: plt.xticks(ticks, fontsize=24)
-    else: plt.xticks(fontsize=26)
-    plt.yticks(fontsize=26)
-
+    plt.xlabel(x, fontsize=48)
+    plt.ylabel(ylabel, fontsize=48)
+    if xticks is not None: plt.xticks(xticks, fontsize=40)
+    else: plt.xticks(fontsize=40)
+    if yticks is not None: plt.yticks(yticks, fontsize=40)
+    else: plt.yticks(fontsize=40)
     sns.despine()
 
     fig.suptitle('')
     
     if savefig:
-        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+        for ext in format:
+            plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.{ext}'),
+                        transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
     # plt.close()
 
-def plot_perf_reg(df, x, title=None, y='score', ylabel=None, xlim=None, ticks=None, ylim=None, xlabel=None,
+def plot_perf_reg(df, x, title=None, y='score', ylabel=None, xlim=None, xticks=None, yticks=None, ylim=None, xlabel=None,
                   hue=None, hue_order=None, size=None,size_order=None,style=None,palette=None,legend=True,
-    chance_perf=0.5, figsize=(19.2, 9.43),savefig=False, show=False, block=True, **kwargs):
+    chance_perf=0.5, figsize=(19.2, 9.43),savefig=False, show=False, block=True,format=['png'], **kwargs):
 
     fig = plt.figure(figsize=figsize)
+    ax = plt.subplot(1,1,1)
     if hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
@@ -190,56 +295,64 @@ def plot_perf_reg(df, x, title=None, y='score', ylabel=None, xlim=None, ticks=No
 
     if size == 'age': size_order=kwargs.get('ages')
     if style == 'group': markers = {"stimulation": "s", "control": "X"}
+    elif style == 'Age': markers = {14: "o", 21: "^", 28: "X", 35: "s"}
     else: markers=True
-    g = sns.scatterplot(data=df,
-            x=x,
-            y=y,
-            legend=legend,
-            hue=hue,
-            hue_order=hue_order,
-            size=size,
-            sizes=(50, 750),
-            size_order=size_order,
-            style=style,
-            markers=markers,
-            palette=palette,
-            s=150)
-            #,ci=None)
 
-    if xlim is not None: g.set_xlim(left=xlim[0], right=xlim[1])
+    g = sns.relplot(data=df,
+                    kind='scatter',
+                    x=x,
+                    y=y,
+                    legend=legend,
+                    hue=hue,
+                    hue_order=hue_order,
+                    s=100,
+                    linewidth=0.5,
+                    edgecolor='black',
+                    style=style,
+                    markers=markers,
+                    palette=palette)
+    # g.map(sns.regplot, data=df,x=x, scatter=False,
+    #                 y=y,color='black')
+
+    if xlim is not None: ax.set_xlim(left=xlim[0], right=xlim[1])
     plt.ylim(ylim)
-    plt.yticks(fontsize=26)
-    if ticks is not None: plt.xticks(ticks, fontsize=26)
-    else: plt.xticks(fontsize=26)
+    if yticks is not None: plt.yticks(yticks, fontsize=26)
+    else: plt.yticks(fontsize=32)
+    if xticks is not None: plt.xticks(xticks, fontsize=26)
+    else: plt.xticks(fontsize=32)
     if xlabel is not None: plt.xlabel(xlabel,fontsize=30)
-    else: plt.xlabel(x,fontsize=30)
+    else: plt.xlabel(x,fontsize=40)
     if ylabel is not None: plt.ylabel(ylabel,fontsize=30)
-    else: plt.ylabel(x,fontsize=30)
+    else: plt.ylabel(x,fontsize=40)
 
     if legend:
         if size is not None:
-            l = plt.legend(fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
-        else: l = plt.legend(title=hue, title_fontsize='22',fontsize='22', loc="upper left", bbox_to_anchor=(1, 1))
-        plt.setp(l.get_title(), fontsize='22')
+            l = plt.legend(fontsize='32', loc="upper left", bbox_to_anchor=(1, 1))
+        else: l = plt.legend(title=hue, title_fontsize='32',fontsize='32', loc="upper left", bbox_to_anchor=(1, 1))
+        plt.setp(l.get_title(), fontsize='40')
 
     # if hue=='genotype':
     #     l.legendHandles[1].set_sizes([50])
     #     l.legendHandles[2].set_sizes([50])
     #     l.legendHandles[3].set_sizes([50])
 
-    if y=='percentage_change': g.axhline(0,color='r',linestyle='--',linewidth='2.0')
-    if chance_perf is not None and y=='score':
-        g.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-    if x=='rho': g.axvline(1.0,color='gray',linestyle='--',linewidth='2.0')
+    if y=='percentage_change': g.refline(y=0,color='r',linestyle='--',linewidth='2.0')
+    if chance_perf is not None and x=='score':
+        g.refline(x=chance_perf,color='r',linestyle='--',linewidth='2.0')
+    if x=='rho':
+        g.refline(x=1.0, color='gray',linestyle='--',linewidth='2.0')
+    if y=='rho':
+        g.refline(y=1.0, color='gray',linestyle='--',linewidth='2.0')
 
-    fig = g.get_figure()
+    # fig = g.get_figure()
     # plt.title(title, fontsize=28)
 
     sns.despine()
 
     if savefig:
-        fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+        for ext in format:
+            plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.{ext}'),
+                        transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
 
 def plot_line_plot(df, x, title=None, y='score', ylabel='R squared', xlim=None, ticks=None, ylim=None, xlabel=None,
@@ -268,7 +381,7 @@ def plot_line_plot(df, x, title=None, y='score', ylabel='R squared', xlim=None, 
 
     if savefig:
         fig.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+                    transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
 
 def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, sample=None, xlim=[0, 150], ylim=None, xticks=None, yticks=None,
@@ -292,7 +405,7 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
         else:
             t = np.arange(*sample)
             if cmap is None:
-                plt.plot(t, x[t],linestyle=style)
+                plt.plot(t, x[t],linestyle=style, color='black')
             else:
                 for i, _ in enumerate(t[:-1]):
                     plt.plot(t[i:i+2], x[t[i:i+2]],
@@ -323,8 +436,10 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
             #     0.5, 1.05), fontsize=10, ncol=len(legend))
 
     # set xtick/ytick fontsize
-    if xticks is not None: plt.xticks(xticks,fontsize=24)
-    if yticks is not None: plt.yticks(yticks, fontsize=24)
+    if xticks is not None: plt.xticks(xticks,fontsize=40)
+    else: plt.xticks(fontsize=40)
+    if yticks is not None: plt.yticks(yticks, fontsize=40)
+    else: plt.yticks(fontsize=40)
     # plt.yticks([y_min, y_max], fontsize=22)
 
 
@@ -335,13 +450,13 @@ def plot_time_series(x, feature_set='orig', idx_features=None, n_features=None, 
 
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+                    transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
     # plt.close()
 
 def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features=None, xlim=None, ylim=None,ticks=None,
                             xlabel="Timestep", ylabel="Electrode", cmap='viridis', cbar_norm='norm', cmap_lim=None,cbar_pad=0.02,
-                            num=1, figsize=(19.2, 9.43), subplot=None, title=None,
+                            num=1, figsize=(19.2, 9.43), subplot=None, title=None, format=['png'],
                             savefig=False, block=True, **kwargs):
 
     # transform data
@@ -384,143 +499,209 @@ def plot_time_series_raster(x, feature_set='orig', idx_features=None, n_features
         # cax = divider.append_axes(
         #     "right", f'{cbar_width*100:.2f}%', pad=f'{cbar_pad*100:.2f}%')
 
-        cb = plt.colorbar(pcm) # cax=cax
-        cb.ax.tick_params(labelsize=20)
-        cb.ax.set_ylabel('Activation state', rotation=270)
+        cb = plt.colorbar(pcm, pad=0.01) # cax=cax
+
+        cb.ax.tick_params(labelsize=40)
+        cb.ax.set_ylabel('Activation state of reservoir unit', fontsize=40, labelpad=5.5)
 
     if xlim is not None: ax.set_xlim(left=xlim[0], right=xlim[1])
     if ylim is not None: ax.set_ylim(left=ylim[0], right=ylim[1])
-    plt.yticks(fontsize=24)
-    if ticks is not None: plt.xticks(ticks, fontsize=24)
-    else: plt.xticks(fontsize=24)
-    plt.xlabel(xlabel,fontsize=28)
-    plt.ylabel(ylabel,fontsize=28)
+    plt.yticks(fontsize=40)
+    if ticks is not None: plt.xticks(ticks, fontsize=40)
+    else: plt.xticks(fontsize=40)
+    plt.xlabel(xlabel,fontsize=40)
+    plt.ylabel(ylabel,fontsize=40)
 
     plt.title('')
 
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+        for ext in format:
+            plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.{ext}'),
+                        transparent=True, bbox_inches='tight', dpi=dpi)
     plt.close(fig)
     # plt.show(block=block)
 
-def boxplot(x, y, df, ylab=None, order=None, by_age=False, ages=None,regimes=None, genotypes=None,yticks=None, xticks=None, xticklabs=None,
-            title=None, hue=None, hue_order=None, palette=None, xlabel=None,
+def boxplot(x, y, df, ylab=None, order=None, marker=None, yticks=None, xticks=None, xticklabs=None,
+            title=None, hue=None, hue_order=None, palette=None, xlabel=None, facet=None,
             width=0.5, linewidth=1.5, xlim=None, ylim=None, chance_perf=None,
-            legend=True, figsize=(19.2, 9.43), show=False, savefig=False, block=True, **kwargs):
+            indexvar='sample', withinvars=['Age'], ci_lims=None,
+            stats=False,pairs=None,p_vals=None, dodge=0.5,
+            legend=True, figsize=(19.2, 9.43), show=False, savefig=False, format=['png'], block=True, **kwargs):
+    
+    sns.set(font="Arial", style='ticks', font_scale=1.0)
 
     fig = plt.figure(figsize=figsize)
+    ax = plt.subplot(1, 1, 1)
 
     if palette is None and hue is not None:
         n_modules = len(np.unique(df[hue]))
         palette = sns.color_palette('husl', n_modules+1)[:n_modules]
 
-    if by_age:     
-        age_point = 1
-        plot_legend = True
-        for DIV in ages:
-            ax = plt.subplot(2, 3, age_point)
-            age_data = df[df['age'] == float(DIV)]
-            plot = sns.boxplot(x=x, y=y,
-                        data=age_data,
-                        showmeans=True,
-                        meanprops={"marker":"+",
-                                "markerfacecolor":"white", 
-                                "markeredgecolor":"white",
-                                "markersize":"12"},
-                        palette=palette,
-                        hue=hue,
-                        hue_order=hue_order,
-                        width=width,
-                        linewidth=linewidth,
-                        ax=ax,
-                        **kwargs)
-            plot.set_title(f'DIV{DIV}', loc='left', fontsize=28)
-            if plot_legend:
-                sns.move_legend(ax, loc='center', bbox_to_anchor=(2.5, -0.5))
-                plot_legend = False # plot legend only once
-            plot.legend_.remove()
+    plotting_parameters = {'data': df, 
+                        'x': x,
+                        'y': y,
+                        'hue': hue,
+                        'hue_order': hue_order,
+                        'palette': palette,
+                        'linewidth': 0.5,
+                        'edgecolor': 'black',
+                        'dodge': dodge,
+                        'zorder':0,
+                        's': 16,
+                        'ax': ax}
+    # # Calculate corrected CIs
+    # if ci_lims is None: ci_lims = ylim
+    # if hue is not None:
+    #     confint = get_confints(df, indexvar=indexvar, withinvars=withinvars, x=x, y=y, hue=hue, ci_lims=ci_lims)
+    # # else: #TODO
 
-            if ylim is not None: plt.ylim(ylim)
-            if xlim is not None: plt.xlim(xlim)
+    if marker is not None:
+        # genotype_color_dict = {"WT": (0.9677975592919913, 0.44127456009157356, 0.5358103155058701),
+        #                "HE": (0.5920891529639701, 0.6418467016378244, 0.1935069134991043),
+        #                "KO":(0.21044753832183283, 0.6773105080456748, 0.6433941168468681)}
 
-            plt.xlabel(xlabel, fontsize=28)
-            plt.ylabel(ylab, fontsize=28)
+        # p = (
+        #     so.Plot(df, x=x, y=y, color=hue)
+        #     .add(
+        #         so.Dot(pointsize=24, edgecolor="black"),
+        #         so.Jitter(0.5),
+        #         so.Dodge(),
+        #         marker=marker
+        #     )
+        #     .add(so.Range(color='black', linewidth=3, artist_kws={'capsize': 0.1}), so.Est(errorbar=get_iqr), so.Dodge())
+        #     .add(so.Dot(pointsize=32, marker="d",color='black'), so.Agg("median"), so.Dodge())
+        #     .scale(
+        #         color=so.Nominal(genotype_color_dict)
+        #     #     ,x=so.Continuous().tick(at=xticks),
+        #     #     y=so.Continuous().tick(at=yticks),
+        #         marker=so.Nominal(age_marker_dict)
+        #     )
+        #     # .limit(x=tuple(xlim),y=tuple(ylim))
+        #     # .label(
+        #     #     x=xlabel, y=ylab
+        #     # )
+        # )
+        # p.theme({**axes_style("ticks")})
+        # p.on(ax).plot()
+        # if facet is not None: p.facet(col=facet)
+        if marker == 'group': markers = {"stimulation": "s", "control": "X"}
+        elif marker == 'Age': markers = {14: "o", 21: "^", 28: "X", 35: "s"}
+        elif marker == 'amplitude': markers = {3: "o", 4: "^", 5: "X", 6: "s"}
 
-            if xticks is not None: plt.xticks(xticks, fontsize=24,)
-            else: plt.xticks(fontsize=22)
-            if xticklabs is not None: plot.set_xticklabels(xticklabs)
-            if yticks is not None: plt.yticks(yticks, fontsize=24)
-            else: plt.yticks(fontsize=22)
-
-            if y=='percentage_change': plot.axhline(0,color='r',linestyle='--',linewidth='2.0')
-            if chance_perf is not None: plot.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-            sns.despine()
-
-            age_point += 1
-
+        g = sns.relplot(data=df,
+                    kind='scatter',
+                    x=x,
+                    y=y,
+                    legend=legend,
+                    hue=hue,
+                    hue_order=hue_order,
+                    s=150,
+                    linewidth=0.5,
+                    edgecolor='black',
+                    style=marker,
+                    markers=markers,
+                    palette=palette)
+        for points in g.ax.collections:
+            vertices = points.get_offsets().data
+            if len(vertices) > 0:
+                vertices[:, 0] += np.random.uniform(-0.3, 0.3, vertices.shape[0])
+                points.set_offsets(vertices)
+            xticks = g.ax.get_xticks()
+            g.ax.set_xlim(xticks[0] - 0.5, xticks[-1] + 0.5) # the limits need to be moved to show all the jittered dots
+        
+        pp = g.map(sns.pointplot,
+              data=df,x=x, y=y,
+                hue=hue,
+                hue_order=hue_order,
+                join=False,
+                estimator='median',
+                errorbar=get_iqr,
+                markers="d",
+                order=order,
+                color="black",
+                orient='v',
+                dodge=dodge,
+                errwidth=linewidth,
+                scale=2,
+                capsize=0.2,
+                ax=ax)
+        
     else:
-        ax = plt.subplot(1, 1, 1)
-
-        if hue == x: dodge=False
-        else: dodge=0.2
+        # if hue == x: dodge=False
+        # else: dodge=0.5
 
         pp = sns.pointplot(data=df,x=x, y=y,
                         hue=hue,
                         hue_order=hue_order,
                         join=False,
-                        errorbar='sd',
+                        estimator='median',
+                        errorbar=get_iqr,
                         markers="d",
                         order=order,
                         color="black",
                         orient='v',
                         dodge=dodge,
                         errwidth=linewidth,
-                        scale=2,
+                        scale=3,
                         capsize=0.1,
-                        ax=ax,
-                        **kwargs
-                        )
-
-        sp = sns.stripplot(data=df,x=x, y=y,
-                hue=hue,
-                hue_order=hue_order,
-                palette=palette,
-                dodge=dodge,
-                zorder=0,
-                s=8,
-                ax=ax,
-                **kwargs
-                )
+                        ax=ax)
         
-        if legend: ax.legend(fontsize=22, title=hue, title_fontsize=22, frameon=False, ncol=1, loc='center left', bbox_to_anchor=(1, 0.5))
+        remove_handles,_ = ax.get_legend_handles_labels()
+
+        sp = sns.stripplot(**plotting_parameters)
+        
+        all_handles,_ = ax.get_legend_handles_labels()
+
+        if legend:
+            ax.legend(handles=[h for h in all_handles if h not in remove_handles],
+              labels=hue_order,
+              fontsize=32, title=hue, title_fontsize=40, frameon=False, ncol=1, loc='center right', bbox_to_anchor=(1, 0.5))
         else: sp.legend_.remove()
 
-        if ylim is not None: plt.ylim(ylim)
-        if xlim is not None: plt.xlim(xlim)
+    if stats:
+        plotting_parameters.pop('ax')
+        if hue == x:
+            plotting_parameters['hue'] = None
+            plotting_parameters['hue_order'] = None
+        annotator = Annotator(ax, pairs, **plotting_parameters)
+        annotator.set_pvalues(p_vals)
+        annotator.annotate()
 
-        plt.xlabel(xlabel, fontsize=28)
-        plt.ylabel(ylab, fontsize=28)
+    if ylim is not None: plt.ylim(ylim)
+    if xlim is not None: plt.xlim(xlim)
 
-        if xticks is not None: plt.xticks(xticks, fontsize=24)
-        else:
-            locs,_= plt.xticks()
-            plt.xticks(fontsize=22)
-        if xticklabs is not None: plt.xticks(locs,labels=xticklabs,fontsize=24)
-        if yticks is not None: plt.yticks(yticks, fontsize=24)
-        else: plt.yticks(fontsize=22)
+    plt.xlabel(xlabel, fontsize=40)
+    plt.ylabel(ylab, fontsize=40)
 
-        if y=='percentage_change': pp.axhline(0,color='r',linestyle='--',linewidth='2.0')
-        if chance_perf is not None: pp.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
-        sns.despine()
+    if xticks is not None: plt.xticks(xticks, fontsize=32)
+    else:
+        locs,_= plt.xticks()
+        plt.xticks(fontsize=32)
+        if xticklabs is not None: plt.xticks(locs,labels=xticklabs,fontsize=32)
+    if yticks is not None: plt.yticks(yticks, fontsize=32)
+    else: plt.yticks(fontsize=32)
+
+    if y=='percentage_change': plt.axhline(0,color='r',linestyle='--',linewidth='2.0')
+    if chance_perf is not None: plt.axhline(chance_perf,color='r',linestyle='--',linewidth='2.0')
+    
+    sns.despine()
 
     # set tight layout in case there are different subplots
     plt.tight_layout()
 
     if savefig:
-        plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+        for ext in format:
+            plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.{ext}'),
+                        transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
+# def actual_boxplot(x, y, df, ylab=None, order=None, marker=None, yticks=None, xticks=None, xticklabs=None,
+#             title=None, hue=None, hue_order=None, palette=None, xlabel=None, facet=None,
+#             width=0.5, linewidth=1.5, xlim=None, ylim=None, chance_perf=None,
+#             indexvar='sample', withinvars=['Age'], ci_lims=None,
+#             stats=False,pairs=None,p_vals=None, dodge=0.5,
+#             legend=True, figsize=(19.2, 9.43), show=False, savefig=False, format=['png'], block=True, **kwargs):
+    
+
 
 def parallel_plot(df, y1_var, y2_var, c, hue='genotype', hue_order=['WT','HE','KO'], cmap='viridis', xlabels=None, ylabel=None, ylim=None, chance_perf=None,
                   cb_norm=None, cb_ticks=None, cb_label=None, figsize=(19.2, 9.43), show=False, savefig=False, block=True, title=None, **kwargs):
@@ -598,7 +779,7 @@ def parallel_plot(df, y1_var, y2_var, c, hue='genotype', hue_order=['WT','HE','K
 
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{title}.png'),
-                    transparent=False, bbox_inches='tight', dpi=300)
+                    transparent=False, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
 
 def barplot(data, channels, num, subplot=None, figsize=(19.2, 9.43), name=None, savefig=False):
@@ -734,6 +915,6 @@ def plot_mackey_glass_phase_space(x, y, sample=None, xlim=None, ylim=None, subpl
 
     if savefig:
         plt.savefig(fname=os.path.join(FIG_DIR, f'{fname}.png'),
-                    transparent=True, bbox_inches='tight', dpi=300)
+                    transparent=True, bbox_inches='tight', dpi=dpi)
     if show: plt.show(block=block)
     # plt.close()

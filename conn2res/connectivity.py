@@ -4,6 +4,7 @@ Functionality for connectivity matrix
 """
 import os
 import numpy as np
+import pandas as pd
 import warnings
 from scipy.linalg import eigh
 from bct import get_components, distance_bin
@@ -12,7 +13,7 @@ from .utils import *
 
 
 PROJ_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(PROJ_DIR, 'examples', 'data')
+DATA_DIR = os.path.join(PROJ_DIR, 'data', 'connectivity')
 
 
 class Conn:
@@ -48,6 +49,8 @@ class Conn:
         filename of the connectivity matrix to be loaded from disc
         specified using full path (by default, the connectivity matrix is
         loaded from examples/data)
+    dir : str, optional
+        directory where connectiviy files are stored (by default, examples/data)
     subj_id : int, optional
         index of subject along axis=2 in the group level connectivity
         matrix
@@ -59,7 +62,7 @@ class Conn:
         be used with care!)
     """
 
-    def __init__(self, w=None, filename=None, subj_id=0, modules=None,
+    def __init__(self, w=None, filename=None, dir=DATA_DIR, subj_id=0, modules=None,
                  density=None):
         """
         Constructor method for class Conn
@@ -69,8 +72,10 @@ class Conn:
             self.w = w
         else:
             # load connectivity data
-            if filename is not None:
-                self.w = np.load(filename)
+            if filename is not None and dir is None:
+                self.w = load_file(filename)
+            elif filename is not None and dir is not None:
+                self.w = load_file(os.path.join(dir, filename))
             else:
                 self.w = load_file('connectivity.npy')
 
@@ -441,8 +446,14 @@ def load_file(filename):
     result : np.ndarray
         data stored in the file
     """
-    return np.load(os.path.join(DATA_DIR, filename))
-
+    file_type = os.path.splitext(filename)[-1]
+    if file_type == '.npy':
+        return np.load(os.path.join(filename))
+    elif file_type == '.csv':
+        df = pd.read_csv(os.path.join(filename), header=None)
+        return df.to_numpy()
+    else:
+        raise TypeError("Unsupported file type. Import .npy or .csv file.")
 
 def get_modules(module_assignment):
     """

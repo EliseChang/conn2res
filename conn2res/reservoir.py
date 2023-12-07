@@ -189,7 +189,7 @@ class EchoStateNetwork(Reservoir):
             # if (t > 0) and (t % 100 == 0):
             #     print(f'\t ----- timestep = {t}')
             synap_input = np.dot(
-                self._state[t-1, :], self.w) + np.dot(ext_input[t-1, :], w_in)
+                self._state[t-1, :], self.w) + np.dot(ext_input[t-1, :], w_in[:,:,t-1])
             self._state[t, :] = self.activation_function(synap_input, **kwargs)
 
         # remove initial condition (to match the time index of _state
